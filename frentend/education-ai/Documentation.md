@@ -36,8 +36,13 @@ npm ci
 Create or update `.env.local`:
 
 ```env
-NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
 ```
+
+For Vercel, set `NEXT_PUBLIC_API_URL` to the deployed Render API URL, for
+example `https://eduinsight-api.onrender.com`. The frontend keeps browser
+requests on `/api-proxy`, while the Next.js rewrite forwards them to this
+backend URL.
 
 The frontend uses the Next.js rewrite in `next.config.mjs` to proxy browser requests through `/api-proxy`. This avoids browser CORS problems while the backend remains responsible for authentication and authorization.
 
@@ -169,7 +174,8 @@ npm ci            # Install package-lock dependencies exactly
 
 ### Backend requests fail
 
-Confirm the FastAPI server is running on `http://127.0.0.1:8000` and that `.env.local` points to the correct backend URL.
+Confirm the FastAPI server is running and that `NEXT_PUBLIC_API_URL` points to
+the correct backend URL.
 
 ### Files return 404
 

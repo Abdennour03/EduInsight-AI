@@ -1,5 +1,8 @@
-const rawUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.VITE_API_BASE_URL;
-const DIRECT_URL = (!rawUrl || rawUrl === "/" ? "http://127.0.0.1:8000" : rawUrl).replace(/\/$/, "");
+const rawUrl =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  process.env.VITE_API_BASE_URL;
+const DIRECT_URL = (rawUrl || "http://127.0.0.1:8000").replace(/\/$/, "");
 // In the browser, use the Next.js proxy to avoid CORS. On the server (SSR), call directly.
 const API_BASE_URL = typeof window !== "undefined" ? "/api-proxy" : DIRECT_URL;
 export const getFileUrl = (filePath: string) =>

@@ -149,6 +149,52 @@ npm run start
 
 Run the backend and frontend in separate terminals.
 
+## Deployment
+
+### Render Backend
+
+The repository includes [render.yaml](render.yaml). In Render, create a
+Blueprint from the repository or configure a Python web service with:
+
+```text
+Build command: pip install -r requirements.txt
+Start command: uvicorn app:app --host 0.0.0.0 --port $PORT
+```
+
+Set the backend environment variable:
+
+```text
+CORS_ORIGINS=https://your-app.vercel.app
+```
+
+Multiple frontend origins can be comma-separated. For temporary testing,
+`CORS_ORIGINS=*` is supported; wildcard mode disables credentialed CORS as
+required by browsers. Render provides the `PORT` variable automatically.
+
+The backend uses local SQLite and local upload storage. These are suitable for
+development and simple demos. For production persistence, use a managed
+database and object storage because Render web-service filesystems should not
+be treated as permanent storage.
+
+### Vercel Frontend
+
+Create a Vercel project with the frontend root directory set to:
+
+```text
+frentend/education-ai
+```
+
+Vercel detects Next.js automatically. Set this environment variable in the
+Vercel project settings:
+
+```text
+NEXT_PUBLIC_API_URL=https://your-render-service.onrender.com
+```
+
+The production build command is `npm run build`. After deployment, update the
+Render `CORS_ORIGINS` value with the real Vercel URL and redeploy or restart
+the backend.
+
 ## Architecture
 
 ### Backend
