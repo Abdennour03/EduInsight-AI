@@ -15,6 +15,7 @@ class AttendanceRepo:
                 "email": row[2],
                 "phone_number": row[3],
                 "level": row[4],
+                "class_id": class_id,
             }
             for row in self.db.cursor.fetchall()
         ]

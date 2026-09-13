@@ -120,7 +120,22 @@ class StudentRepo:
             )
             for row in self.db.cursor.fetchall()
         ]
+
+    def get_students_by_class_id(self, class_id):
+        """Fetch all students enrolled in a single class."""
+        self.db.cursor.execute(
+            """SELECT student_id, full_name, email,
+                      password, phone_number, level, class_id
+               FROM students
+               WHERE class_id = ?""",
+            (class_id,),
+        )
+        return [
+            Student(row[0], row[1], row[2], row[3], row[4], row[5], row[6])
+            for row in self.db.cursor.fetchall()
+        ]
         
+
     def update_student(self, student_id, **kwargs):
         student = self.get_student(student_id)
         if not kwargs:

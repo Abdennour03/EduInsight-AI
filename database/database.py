@@ -161,6 +161,12 @@ class Database:
                 max_score REAL NOT NULL DEFAULT 20,
                 FOREIGN KEY (course_id) REFERENCES courses(course_id)
             );
+            CREATE TABLE IF NOT EXISTS learning_materials (
+                material_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_type TEXT NOT NULL CHECK (owner_type IN ('course', 'exercise')),
+                owner_id INTEGER NOT NULL,
+                file_path TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS submissions (
                 submission_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 student_id INTEGER NOT NULL,

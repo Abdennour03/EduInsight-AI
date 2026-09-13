@@ -1,9 +1,10 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ClassCreate(BaseModel):
     name: str
     academic_year: str
+    teacher_ids: list[int] = Field(default_factory=list)
 
 
 class ClassUpdate(BaseModel):

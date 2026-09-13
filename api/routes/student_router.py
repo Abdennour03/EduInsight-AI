@@ -29,10 +29,20 @@ from api.dependencies import course_controller
 def get_my_courses(
     current_user=Depends(require_student)
 ):
-    if current_user.class_id is None:
-        return []
+    class_id = current_user.class_id
 
-    courses = course_controller.get_courses_by_class_id(current_user.class_id)
+    # If the student has no class_id, look up the class via their level
+    if class_id is None:
+        from api.dependencies import db
+        row = db.cursor.execute(
+            "SELECT id FROM classes WHERE UPPER(TRIM(academic_year)) = ?",
+            (current_user.level.strip().upper(),)
+        ).fetchone()
+        if row is None:
+            return []
+        class_id = row[0]
+
+    courses = course_controller.get_courses_by_class_id(class_id)
 
     return [
         {
@@ -56,9 +66,7 @@ from api.dependencies import exercise_controller
 def get_my_exercises(
     current_user=Depends(require_student)
 ):
-    if current_user.class_id is None:
-        return []
-
+    # Let the service handle class_id being None – it will fall back to the student's level.
     exercises = student_controller.get_my_exercises(
         current_user.student_id,
         current_user.class_id
@@ -72,7 +80,10 @@ def get_my_exercises(
                 "course_id": exercise.course.course_id,
                 "course_name": exercise.course.course_name,
                 "semester": exercise.course.semester
-            }
+            },
+            "max_score": exercise.max_score,
+            "score": getattr(exercise, "score", None),
+            "submission_status": getattr(exercise, "submission_status", "pending"),
         }
         for exercise in exercises
     ]
@@ -104,7 +115,6 @@ def get_my_submissions(
     ]
 
 from api.schemas.submission_schema import (
-    SubmissionCreate,
     SubmissionResponse
 )
 
@@ -114,17 +124,33 @@ from api.dependencies import (
 )
 
 from fastapi import Depends
+from fastapi import File, Form, UploadFile
+from utils.submission_storage import (
+    delete_submission_file,
+    save_submission_file,
+)
 @router.post("/me/submissions", response_model=SubmissionResponse)
 def create_my_submission(
-    data: SubmissionCreate,
+    exercise_id: int = Form(...),
+    file: UploadFile = File(...),
     current_user=Depends(require_student)
 ):
 
-    submission = submission_controller.create_submission(
-        current_user.student_id,
-        data.exercise_id,
-        data.file_path
+    file_path = save_submission_file(
+        file,
+        exercise_id,
+        current_user.student_id
     )
+
+    try:
+        submission = submission_controller.create_submission(
+            current_user.student_id,
+            exercise_id,
+            file_path
+        )
+    except ValueError:
+        delete_submission_file(file_path)
+        raise
 
     return {
         "submission_id": submission.submission_id,
@@ -231,7 +257,8 @@ def create_student(data: StudentCreate):
         data.email,
         data.password,
         data.phone_number,
-        data.level
+        data.level,
+        data.class_id
     )
 
     if result is False:
@@ -245,7 +272,8 @@ def create_student(data: StudentCreate):
         "full_name": result.full_name,
         "email": result.email,
         "phone_number": result.phone_number,
-        "level": result.level
+        "level": result.level,
+        "class_id": result.class_id
     }
 
 from api.schemas.student_schema import StudentUpdate

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   api,
   type ApiStudent,
@@ -16,6 +16,7 @@ import {
   type TeacherExercise,
   type TeacherNotification,
 } from "../lib/api";
+import { getFileUrl } from "../lib/api";
 import {
   BarChart3,
   Bell,
@@ -47,11 +48,14 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import { jsPDF } from "jspdf";
 
 type Role = "Student" | "Teacher" | "Admin";
 
@@ -95,7 +99,9 @@ let students = [
   },
 ];
 
-type AdminStudent = (typeof students)[number];
+// student_id is added on top of the mock shape so real API rows (which do
+// carry a student_id) can be tracked through the admin UI for reports/delete.
+type AdminStudent = (typeof students)[number] & { student_id?: number };
 type AdminTeacher = {
   teacher_id: number;
   full_name: string;
@@ -103,6 +109,32 @@ type AdminTeacher = {
   classes: { class_id: number; name: string; academic_year: string }[];
 };
 type AdminClass = { class_id: number; name: string; academic_year: string };
+
+// ---- Admin student report ---------------------------------------------
+// Matches AdminStudentReportResponse from the OpenAPI spec exactly:
+// GET /admin/students/{student_id}/report returns student_id, name, email,
+// class_info, and exercises_and_exams (each with a nullable score). There
+// is NO courses / submissions / attendance data on this endpoint, so we
+// must not pretend those fields exist.
+interface ReportExerciseEntry {
+  exercise_id: number;
+  exercise_name: string;
+  score: number | null;
+}
+
+interface ClassInfo {
+  class_id: number;
+  name: string;
+  academic_year: string;
+}
+
+interface StudentReportData {
+  student_id: number;
+  name: string;
+  email: string;
+  class_info: ClassInfo | null;
+  exercises_and_exams: ReportExerciseEntry[];
+}
 
 let courses = [
   {
@@ -171,25 +203,27 @@ function Sidebar({
   const items =
     role === "Student"
       ? [
-          ["Overview", LayoutDashboard],
-          ["My Courses", BookOpen],
-          ["Progress", BarChart3],
-          ["Announcements", Bell],
-        ]
+        ["Overview", LayoutDashboard],
+        ["My Courses", BookOpen],
+        ["Progress", BarChart3],
+        ["Announcements", Bell],
+      ]
       : role === "Teacher"
         ? [
-            ["Overview", LayoutDashboard],
-            ["Submissions", ClipboardCheck],
-            ["Attendance", CalendarDays],
-            ["My Classes", Users],
-          ]
+          ["Overview", LayoutDashboard],
+          ["My Courses", BookOpen],
+          ["Submissions", ClipboardCheck],
+          ["Attendance", CalendarDays],
+          ["My Classes", Users],
+        ]
         : [
-            ["Overview", LayoutDashboard],
-            ["Students", GraduationCap],
-            ["Teachers", Users],
-            ["Classes", BookOpen],
-            ["Reports", BarChart3],
-          ];
+          // Students / Teachers / Classes management is unified inside the
+          // Overview tab-group in AdminWorkspace, so no separate sidebar
+          // entries are needed for them. Reports is now the primary
+          // analytics view for admins.
+          ["Overview", LayoutDashboard],
+          ["Reports", BarChart3],
+        ];
   return (
     <>
       {open && (
@@ -394,206 +428,109 @@ function Stat({
   );
 }
 
-/* Legacy mock student dashboard retained only as historical markup; the active route uses ClassicStudentWorkspace.
-function StudentDashboard() {
-  const [subject, setSubject] = useState("Math · 3AC");
-  const [tab, setTab] = useState<"Courses" | "Classmates">("Courses");
+function StudentGradeRow({
+  student,
+  exercise,
+  initialGrade,
+  submission,
+  onGradeChange,
+  onNotify
+}: {
+  student: AttendanceStudent;
+  exercise: TeacherExercise;
+  initialGrade?: Grade;
+  submission?: Submission;
+  onGradeChange: () => void;
+  onNotify: () => void;
+}) {
+  const [score, setScore] = useState<string>(initialGrade ? String(initialGrade.score) : "");
+  const [saving, setSaving] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState("");
+
+  useEffect(() => {
+    if (initialGrade) setScore(String(initialGrade.score));
+  }, [initialGrade]);
+
+  const handleSave = async () => {
+    const numScore = parseFloat(score);
+    if (isNaN(numScore) || numScore === initialGrade?.score) return;
+    setSaving(true);
+    try {
+      if (initialGrade?.grade_id) {
+        await api.updateGrade(initialGrade.grade_id, numScore);
+      } else {
+        await api.createGrades([{ score: numScore, student_id: student.student_id, exercise_id: exercise.exercise_id }]);
+      }
+      onGradeChange();
+    } catch (e) {
+      console.error("Failed to save grade:", e);
+      alert("Failed to save grade");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <div className="space-y-4 sm:space-y-7">
-      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs font-semibold text-[#475569] sm:text-sm">
-            Active classroom
-          </p>
-          <div className="relative">
-            <select
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              className="appearance-none rounded-xl border border-[#DBEAFE] bg-white py-2.5 pl-3 pr-9 text-xs font-bold text-[#0F172A] outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#DBEAFE] sm:py-3 sm:pl-4 sm:pr-12 sm:text-sm"
-            >
-              <option>Math · 3AC</option>
-              <option>Physics · 3AC</option>
-              <option>French · 3AC</option>
-            </select>
-            <ChevronDown
-              className="pointer-events-none absolute right-4 top-3.5 text-[#475569]"
-              size={16}
-            />
-          </div>
-        </div>
-        <div className="flex items-center rounded-xl border border-[#DBEAFE] bg-white px-3 py-2.5 text-[11px] text-[#1E3A8A] sm:px-4 sm:py-3 sm:text-xs">
-          <span className="mr-1 font-bold text-[#1D4ED8]">Next:</span>
-          <span className="truncate">Exercise 2 — Functions</span>
-          <span className="ml-auto shrink-0 pl-2 font-semibold text-[#475569]">
-            Tomorrow
+    <div className="flex items-center gap-3 border-b border-slate-50 py-3">
+      <Avatar
+        initials={student.full_name
+          .split(" ")
+          .map((part) => part[0])
+          .join("")
+          .slice(0, 2)}
+      />
+      <div className="flex-1">
+        <span className="text-sm font-semibold text-slate-700">
+          {student.full_name}
+        </span>
+        {submission ? (
+          <span className="ml-3 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+            Submitted
           </span>
-        </div>
+        ) : (
+          <span className="ml-3 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+            Pending
+          </span>
+        )}
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
-        <Stat
-          label="Average score"
-          value="17.5 / 20"
-          detail="+1.2 this month"
-          icon={BarChart3}
+
+      {submission && (
+        <a
+          href={getFileUrl(submission.file_path)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold text-[#0052CC] transition hover:bg-blue-50"
+        >
+          <Eye size={14} /> View
+        </a>
+      )}
+
+      <div className="ml-2 flex items-center gap-2">
+        <input
+          type="number"
+          min="0"
+          max={exercise.max_score}
+          value={score}
+          onChange={(e) => setScore(e.target.value)}
+          onBlur={handleSave}
+          className="w-16 rounded-lg border border-slate-200 px-2 py-1.5 text-center text-sm font-bold text-[#0052CC] outline-none transition focus:border-[#0052CC] focus:ring-2 focus:ring-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+          placeholder="-"
+          disabled={saving || (!submission && !initialGrade)}
+          title={(!submission && !initialGrade) ? "The student must submit the exercise before it can be graded." : ""}
         />
-        <Stat
-          label="Exercises done"
-          value="12 / 15"
-          detail="80% completion"
-          icon={ClipboardCheck}
-        />
-        <Stat
-          label="Class rank"
-          value="#4"
-          detail="of 28 students"
-          icon={GraduationCap}
-        />
+        <span className="text-sm font-bold text-slate-400">/ {exercise.max_score}</span>
       </div>
-      <div className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">
-        <section className="rounded-2xl border border-[#DBEAFE] bg-white">
-          <div className="flex items-center justify-between border-b border-[#DBEAFE] px-5 py-4">
-            <div>
-              <h2 className="font-bold text-[#0F172A]">
-                {subject.split(" · ")[0]} learning path
-              </h2>
-              <p className="mt-1 text-xs text-[#475569]">
-                Courses and exercises for this class
-              </p>
-            </div>
-            <div className="flex gap-1 rounded-lg bg-[#EFF6FF] p-1">
-              {(["Courses", "Classmates"] as const).map((item) => (
-                <button
-                  onClick={() => setTab(item)}
-                  key={item}
-                  className={`rounded-md px-3 py-1.5 text-xs font-semibold ${tab === item ? "bg-white text-[#0052CC] shadow-sm" : "text-[#475569]"}`}
-                >
-                  {item}
-                </button>
-              ))}
-            </div>
-          </div>
-          {tab === "Courses" ? (
-            <div className="space-y-3 p-5">
-              {courses.map((course) => (
-                <div
-                  key={course.name}
-                  className="rounded-xl border border-[#DBEAFE]"
-                >
-                  <div className="flex items-center gap-3 bg-white/70 px-4 py-3">
-                    <div className="rounded-lg bg-blue-100 p-2 text-[#0052CC]">
-                      <BookOpen size={16} />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-semibold text-slate-800">
-                        {course.name}
-                      </h3>
-                      <p className="text-[11px] text-[#475569]">
-                        with {course.teacher}
-                      </p>
-                    </div>
-                    <span className="ml-auto text-xs text-[#475569]">
-                      {course.exercises.length} exercises
-                    </span>
-                  </div>
-                  {course.exercises.map((ex) => (
-                    <div
-                      key={ex.name}
-                      className="flex items-center gap-3 border-t border-[#DBEAFE] px-4 py-3"
-                    >
-                      <div
-                        className={`h-2 w-2 rounded-full ${ex.state === "Submitted" ? "bg-emerald-500" : "bg-slate-300"}`}
-                      />
-                      <p className="text-xs font-medium text-slate-700">
-                        {ex.name}
-                      </p>
-                      <span
-                        className={`ml-auto rounded-full px-2 py-1 text-[10px] font-semibold ${ex.state === "Submitted" ? "bg-emerald-50 text-emerald-700" : "bg-[#EFF6FF] text-[#475569]"}`}
-                      >
-                        {ex.state}
-                      </span>
-                      <span className="w-14 text-right text-xs font-bold text-slate-700">
-                        {ex.score}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="grid gap-2 p-5 sm:grid-cols-2">
-              {students.slice(0, 4).map((student) => (
-                <div
-                  key={student.name}
-                  className="flex items-center gap-3 rounded-xl border border-[#DBEAFE] p-3"
-                >
-                  <Avatar initials={student.initials} />
-                  <div>
-                    <p className="text-xs font-semibold text-slate-800">
-                      {student.name}
-                    </p>
-                    <p className="text-[11px] text-[#475569]">Classmate</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-        <aside className="space-y-5">
-          <section className="rounded-2xl bg-[#0c2254] p-5 text-white">
-            <div className="flex items-center gap-2 text-blue-200">
-              <Bell size={16} />
-              <span className="text-xs font-semibold uppercase tracking-[.15em]">
-                Announcement
-              </span>
-            </div>
-            <h3 className="mt-5 text-lg font-bold">Mock exam schedule</h3>
-            <p className="mt-2 text-sm leading-6 text-blue-100/75">
-              The mathematics mock exam will take place on Friday, April 26 at
-              09:00.
-            </p>
-            <button className="mt-5 text-xs font-bold text-white underline underline-offset-4">
-              Read all announcements
-            </button>
-          </section>
-          <section className="rounded-2xl border border-[#DBEAFE] bg-white p-5">
-            <div className="flex items-center justify-between">
-              <h2 className="font-bold text-[#0F172A]">Recent feedback</h2>
-              <button className="text-xs font-semibold text-[#0052CC]">
-                View all
-              </button>
-            </div>
-            <div className="mt-4 space-y-4">
-              <div className="flex gap-3">
-                <Avatar initials="NB" />
-                <div>
-                  <p className="text-xs font-semibold text-slate-800">
-                    Nadia Bennani
-                  </p>
-                  <p className="mt-1 text-xs leading-5 text-[#475569]">
-                    “Great progress on your last exercise. Keep showing your
-                    work.”
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <Avatar initials="KR" />
-                <div>
-                  <p className="text-xs font-semibold text-slate-800">
-                    Karim Rami
-                  </p>
-                  <p className="mt-1 text-xs leading-5 text-[#475569]">
-                    “Your reasoning is becoming much clearer.”
-                  </p>
-                </div>
-              </div>
-            </div>
-          </section>
-        </aside>
-      </div>
+
+      <button
+        onClick={onNotify}
+        className="ml-2 rounded-full p-2 text-[#475569] transition hover:bg-blue-50 hover:text-[#0052CC]"
+        title="Notify Student"
+      >
+        <Bell size={16} />
+      </button>
     </div>
   );
 }
-*/
 
 function DynamicTeacherWorkspace({
   active,
@@ -604,6 +541,7 @@ function DynamicTeacherWorkspace({
   grades,
   attendance,
   onAttendanceSaved,
+  reload,
 }: {
   active: string;
   teacher: Teacher;
@@ -613,17 +551,43 @@ function DynamicTeacherWorkspace({
   grades: Grade[];
   attendance: AttendanceRecord[];
   onAttendanceSaved: () => void;
+  reload: () => Promise<void>;
 }) {
   const [classId, setClassId] = useState(teacher.classes[0]?.class_id ?? 0);
   const [exerciseId, setExerciseId] = useState(exercises[0]?.exercise_id ?? 0);
-  const [statuses, setStatuses] = useState<
-    Record<number, "present" | "absent">
-  >(() =>
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+
+  useEffect(() => {
+    if (exerciseId) {
+      api.getExerciseSubmissions(exerciseId).then(setSubmissions).catch(() => setSubmissions([]));
+    } else {
+      setSubmissions([]);
+    }
+  }, [exerciseId]);
+
+  const [statuses, setStatuses] = useState<Record<number, "present" | "absent">>(() =>
     Object.fromEntries(
       students.map((student) => [student.student_id, "absent"]),
     ),
   );
   const [saving, setSaving] = useState(false);
+  const [showCourseModal, setShowCourseModal] = useState(false);
+  const [showExerciseModal, setShowExerciseModal] = useState(false);
+  const [newCourseName, setNewCourseName] = useState("");
+  const [newCourseSubject, setNewCourseSubject] = useState("");
+  const [newCourseFile, setNewCourseFile] = useState<File | undefined>();
+  const [newCourseClassId, setNewCourseClassId] = useState(teacher.classes[0]?.class_id ?? 0);
+  const [newExerciseName, setNewExerciseName] = useState("");
+  const [newExerciseMaxScore, setNewExerciseMaxScore] = useState(20);
+  const [newExerciseFile, setNewExerciseFile] = useState<File | undefined>();
+  const [newExerciseCourseId, setNewExerciseCourseId] = useState(courses[0]?.course_id ?? 0);
+  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
+  const [announcementTitle, setAnnouncementTitle] = useState("");
+  const [announcementMessage, setAnnouncementMessage] = useState("");
+  const [dmStudentId, setDmStudentId] = useState<number | null>(null);
+  const [dmTitle, setDmTitle] = useState("");
+  const [dmMessage, setDmMessage] = useState("");
+
   const selectedStudents = students.filter(
     (student) => student.class_id === classId,
   );
@@ -670,19 +634,112 @@ function DynamicTeacherWorkspace({
     }
   };
 
-  if (active === "My Classes")
+  const handleAddCourse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCourseName || !newCourseSubject || !newCourseClassId) return;
+    setWorkspaceError("");
+    setSaving(true);
+    try {
+      await api.createCourse({
+        course_name: newCourseName,
+        semester: newCourseSubject,
+        class_id: newCourseClassId,
+        file: newCourseFile,
+      });
+      setShowCourseModal(false);
+      setNewCourseName("");
+      setNewCourseSubject("");
+      setNewCourseFile(undefined);
+      await reload();
+    } catch (submissionError) {
+      setWorkspaceError(
+        submissionError instanceof Error
+          ? submissionError.message
+          : "Unable to create the course.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAddExercise = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newExerciseName || !newExerciseCourseId) return;
+    setWorkspaceError("");
+    setSaving(true);
+    try {
+      await api.createExercise({
+        exercise_name: newExerciseName,
+        max_score: newExerciseMaxScore,
+        course_id: newExerciseCourseId,
+        file: newExerciseFile,
+      });
+      setShowExerciseModal(false);
+      setNewExerciseName("");
+      setNewExerciseMaxScore(20);
+      setNewExerciseFile(undefined);
+      await reload();
+    } catch (submissionError) {
+      setWorkspaceError(
+        submissionError instanceof Error
+          ? submissionError.message
+          : "Unable to create the exercise.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSendAnnouncement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!announcementTitle || !announcementMessage) return;
+    setSaving(true);
+    try {
+      await api.sendClassAnnouncement({ title: announcementTitle, message: announcementMessage });
+      setShowAnnouncementModal(false);
+      setAnnouncementTitle("");
+      setAnnouncementMessage("");
+      await reload();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSendDirectMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dmStudentId || !dmTitle || !dmMessage) return;
+    setSaving(true);
+    try {
+      await api.sendStudentFeedback(dmStudentId, { title: dmTitle, message: dmMessage });
+      setDmStudentId(null);
+      setDmTitle("");
+      setDmMessage("");
+      await reload();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (active === "My Classes") {
+    const activeClass = teacher.classes.find(c => c.class_id === classId);
     return (
-      <section id="my-classes" className="space-y-5">
-        <h2 className="text-2xl font-bold text-[#0F172A]">My Classes</h2>
+      <section id="my-classes" className="space-y-7">
+        <div>
+          <p className="text-sm text-[#475569]">Manage your students</p>
+          <h2 className="mt-1 text-2xl font-bold text-[#0F172A]">My Classes</h2>
+        </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {teacher.classes.length ? (
             teacher.classes.map((item) => (
               <button
                 key={item.class_id}
                 onClick={() => setClassId(item.class_id)}
-                className={`rounded-2xl border p-5 text-left ${classId === item.class_id ? "border-[#0052CC] bg-[#EFF6FF]" : "border-[#DBEAFE] bg-white"}`}
+                className={`flex flex-col rounded-2xl border p-5 text-left transition hover:border-[#0052CC] hover:shadow-sm ${classId === item.class_id ? "border-[#0052CC] bg-[#EFF6FF] shadow-sm" : "border-[#DBEAFE] bg-white"}`}
               >
-                <BookOpen className="mb-3 text-[#0052CC]" size={20} />
+
+                <div className={`mb-4 flex h-10 w-10 items-center justify-center rounded-xl ${classId === item.class_id ? "bg-[#0052CC] text-white" : "bg-blue-50 text-[#0052CC]"}`}>
+                  <BookOpen size={20} />
+                </div>
                 <p className="font-bold text-[#0F172A]">{item.name}</p>
                 <p className="mt-1 text-xs text-[#64748B]">
                   {item.academic_year}
@@ -693,8 +750,115 @@ function DynamicTeacherWorkspace({
             <p className="text-sm text-[#64748B]">No classes assigned.</p>
           )}
         </div>
+
+        {activeClass && (
+          <div className="rounded-2xl border border-[#DBEAFE] bg-white">
+            <div className="border-b border-[#DBEAFE] p-5">
+              <h3 className="font-bold text-[#0F172A]">{activeClass.name} — Enrolled Students</h3>
+              <p className="mt-1 text-xs text-[#64748B]">Total: {selectedStudents.length} students</p>
+            </div>
+            {selectedStudents.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/50 text-[10px] uppercase tracking-wider text-[#475569]">
+                      <th className="px-5 py-3 font-semibold">Student Name</th>
+                      <th className="px-5 py-3 font-semibold">Email Address</th>
+                      <th className="px-5 py-3 font-semibold">Class Name</th>
+                      <th className="px-5 py-3 text-right font-semibold">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedStudents.map((student) => (
+                      <tr key={student.student_id} className="transition hover:bg-slate-50/50">
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <Avatar
+                              initials={student.full_name
+                                .split(" ")
+                                .map((part) => part[0])
+                                .join("")
+                                .slice(0, 2)
+                                .toUpperCase()}
+                            />
+                            <span className="text-sm font-semibold text-slate-800">
+                              {student.full_name}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-4 text-sm text-[#64748B]">
+                          {student.email}
+                        </td>
+                        <td className="px-5 py-4 text-sm font-medium text-slate-700">
+                          {activeClass.name}
+                        </td>
+                        <td className="px-5 py-4 text-right">
+                          <button className="rounded-lg p-2 text-[#475569] transition hover:bg-white hover:text-[#0052CC] hover:shadow-sm">
+                            <MoreHorizontal size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="p-8 text-center">
+                <Users className="mx-auto mb-3 text-slate-300" size={32} />
+                <p className="text-sm font-medium text-[#475569]">No students currently enrolled in this class</p>
+                <p className="mt-1 text-xs text-slate-500">Students must be assigned to this class by an administrator.</p>
+              </div>
+            )}
+          </div>
+        )}
       </section>
     );
+  }
+
+  if (active === "My Courses") {
+    return (
+      <section id="my-courses" className="space-y-5">
+        <div>
+          <p className="text-sm text-[#475569]">Teaching materials</p>
+          <h2 className="mt-1 text-2xl font-bold text-[#0F172A]">My Courses</h2>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {courses.length ? courses.map((course) => {
+            const courseExercises = exercises.filter(
+              (exercise) => exercise.course.course_id === course.course_id,
+            );
+            return (
+              <div key={course.course_id} className="rounded-2xl border border-[#DBEAFE] bg-white p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-bold text-[#0F172A]">{course.course_name}</h3>
+                    <p className="mt-1 text-xs text-[#64748B]">{course.semester} · {course.level}</p>
+                  </div>
+                  {course.material_file_path && (
+                    <a href={getFileUrl(course.material_file_path)} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-[#0052CC]">
+                      View material
+                    </a>
+                  )}
+                </div>
+                <div className="mt-4 space-y-2 border-t border-slate-100 pt-3">
+                  {courseExercises.length ? courseExercises.map((exercise) => (
+                    <div key={exercise.exercise_id} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="text-slate-700">{exercise.exercise_name}</span>
+                      {exercise.material_file_path && (
+                        <a href={getFileUrl(exercise.material_file_path)} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-[#0052CC]">
+                          View file
+                        </a>
+                      )}
+                    </div>
+                  )) : <p className="text-xs text-[#64748B]">No exercises yet.</p>}
+                </div>
+              </div>
+            );
+          }) : <p className="text-sm text-[#64748B]">No courses created yet.</p>}
+        </div>
+      </section>
+    );
+  }
 
   if (active === "Attendance")
     return (
@@ -781,17 +945,25 @@ function DynamicTeacherWorkspace({
               Real students and grades from the backend.
             </p>
           </div>
-          <select
-            value={exerciseId}
-            onChange={(event) => setExerciseId(Number(event.target.value))}
-            className="rounded-xl border border-[#DBEAFE] px-3 py-2 text-sm"
-          >
-            {exercises.map((item) => (
-              <option key={item.exercise_id} value={item.exercise_id}>
-                {item.exercise_name}
-              </option>
-            ))}
-          </select>
+          <div className="flex gap-3">
+            <select
+              value={exerciseId}
+              onChange={(event) => setExerciseId(Number(event.target.value))}
+              className="rounded-xl border border-[#DBEAFE] px-3 py-2 text-sm focus:border-[#0052CC] focus:outline-none"
+            >
+              {exercises.map((item) => (
+                <option key={item.exercise_id} value={item.exercise_id}>
+                  {item.exercise_name}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => setShowAnnouncementModal(true)}
+              className="rounded-xl bg-[#0052CC] px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-700"
+            >
+              Send Class Announcement
+            </button>
+          </div>
         </div>
         <div className="rounded-2xl border border-[#DBEAFE] bg-white p-5">
           {selectedExercise && selectedStudents.length ? (
@@ -801,25 +973,19 @@ function DynamicTeacherWorkspace({
                   item.student_id === student.student_id &&
                   item.exercise_id === selectedExercise.exercise_id,
               );
+              const submission = submissions.find(
+                (sub) => sub.student_id === student.student_id && sub.exercise_id === selectedExercise.exercise_id
+              );
               return (
-                <div
+                <StudentGradeRow
                   key={student.student_id}
-                  className="flex items-center gap-3 border-b border-slate-50 py-3"
-                >
-                  <Avatar
-                    initials={student.full_name
-                      .split(" ")
-                      .map((part) => part[0])
-                      .join("")
-                      .slice(0, 2)}
-                  />
-                  <span className="flex-1 text-sm font-semibold text-slate-700">
-                    {student.full_name}
-                  </span>
-                  <span className="text-sm font-bold text-[#0052CC]">
-                    {grade ? grade.score : "-"} / {selectedExercise.max_score}
-                  </span>
-                </div>
+                  student={student}
+                  exercise={selectedExercise}
+                  initialGrade={grade}
+                  submission={submission}
+                  onGradeChange={reload}
+                  onNotify={() => setDmStudentId(student.student_id)}
+                />
               );
             })
           ) : (
@@ -828,18 +994,119 @@ function DynamicTeacherWorkspace({
             </p>
           )}
         </div>
+
+        {showAnnouncementModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+              <h3 className="mb-4 text-xl font-bold text-[#0F172A]">Class Announcement</h3>
+              <form onSubmit={handleSendAnnouncement} className="space-y-4">
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-slate-700">Title</label>
+                  <input
+                    autoFocus
+                    required
+                    type="text"
+                    placeholder="e.g. Important Update"
+                    value={announcementTitle}
+                    onChange={e => setAnnouncementTitle(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#0052CC]"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-slate-700">Message</label>
+                  <textarea
+                    required
+                    rows={4}
+                    placeholder="Type your message to the class here..."
+                    value={announcementMessage}
+                    onChange={e => setAnnouncementMessage(e.target.value)}
+                    className="w-full resize-none rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#0052CC]"
+                  ></textarea>
+                </div>
+                <div className="mt-6 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAnnouncementModal(false)}
+                    className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="rounded-xl bg-[#0052CC] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {saving ? "Sending..." : "Send to Class"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {dmStudentId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+              <h3 className="mb-4 text-xl font-bold text-[#0F172A]">Notify Student</h3>
+              <p className="mb-4 text-sm text-slate-500">
+                Sending direct message to {students.find(s => s.student_id === dmStudentId)?.full_name}.
+              </p>
+              <form onSubmit={handleSendDirectMessage} className="space-y-4">
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-slate-700">Title</label>
+                  <input
+                    autoFocus
+                    required
+                    type="text"
+                    placeholder="e.g. Missing Submission"
+                    value={dmTitle}
+                    onChange={e => setDmTitle(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#0052CC]"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-slate-700">Message</label>
+                  <textarea
+                    required
+                    rows={4}
+                    placeholder="Type your message here..."
+                    value={dmMessage}
+                    onChange={e => setDmMessage(e.target.value)}
+                    className="w-full resize-none rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#0052CC]"
+                  ></textarea>
+                </div>
+                <div className="mt-6 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setDmStudentId(null)}
+                    className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="rounded-xl bg-[#0052CC] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {saving ? "Sending..." : "Send Message"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </section>
     );
 
   return (
-    <section id="overview" className="space-y-7">
+    <section id="overview" className="space-y-7 relative">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="mb-2 text-sm text-[#475569]">Active class</p>
           <select
             value={classId}
             onChange={(event) => setClassId(Number(event.target.value))}
-            className="rounded-xl border border-[#DBEAFE] bg-white px-4 py-3 text-sm font-semibold text-slate-800"
+            className="rounded-xl border border-[#DBEAFE] bg-white px-4 py-3 text-sm font-semibold text-slate-800 focus:border-[#0052CC] focus:outline-none"
           >
             {teacher.classes.map((item) => (
               <option key={item.class_id} value={item.class_id}>
@@ -848,7 +1115,175 @@ function DynamicTeacherWorkspace({
             ))}
           </select>
         </div>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setShowCourseModal(true)}
+            className="rounded-xl bg-[#0052CC] px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-700 hover:shadow-md"
+          >
+            + Add Course
+          </button>
+          <button
+            onClick={() => {
+              if (courses.length > 0) setNewExerciseCourseId(courses[0].course_id);
+              setShowExerciseModal(true);
+            }}
+            className="rounded-xl border border-[#0052CC] px-5 py-3 text-sm font-bold text-[#0052CC] transition hover:bg-blue-50"
+          >
+            + Add Exercise
+          </button>
+        </div>
       </div>
+      {workspaceError && (
+        <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">
+          {workspaceError}
+        </p>
+      )}
+
+      {showCourseModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="mb-4 text-xl font-bold text-[#0F172A]">Create New Course</h3>
+            <form onSubmit={handleAddCourse} className="space-y-4">
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700">Course Title</label>
+                <input
+                  autoFocus
+                  required
+                  type="text"
+                  placeholder="e.g. Advanced Calculus"
+                  value={newCourseName}
+                  onChange={e => setNewCourseName(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#0052CC]"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700">Subject (Semester)</label>
+                <input
+                  required
+                  type="text"
+                  placeholder="e.g. Mathematics"
+                  value={newCourseSubject}
+                  onChange={e => setNewCourseSubject(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#0052CC]"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700">Class Group</label>
+                <select
+                  required
+                  value={newCourseClassId}
+                  onChange={e => setNewCourseClassId(Number(e.target.value))}
+                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#0052CC]"
+                >
+                  {teacher.classes.map(c => (
+                    <option key={c.class_id} value={c.class_id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700">Course Material (optional)</label>
+                <input
+                  type="file"
+                  accept="application/pdf,image/jpeg,image/png"
+                  onChange={e => setNewCourseFile(e.target.files?.[0])}
+                  className="w-full text-sm text-slate-600"
+                />
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCourseModal(false)}
+                  className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="rounded-xl bg-[#0052CC] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {saving ? "Creating..." : "Create Course"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showExerciseModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="mb-4 text-xl font-bold text-[#0F172A]">Create New Exercise</h3>
+            <form onSubmit={handleAddExercise} className="space-y-4">
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700">Course</label>
+                {courses.length > 0 ? (
+                  <select
+                    required
+                    value={newExerciseCourseId}
+                    onChange={e => setNewExerciseCourseId(Number(e.target.value))}
+                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#0052CC]"
+                  >
+                    {courses.map(c => (
+                      <option key={c.course_id} value={c.course_id}>{c.course_name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-sm text-red-500">You must create a course first.</p>
+                )}
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700">Exercise Title</label>
+                <input
+                  autoFocus
+                  required
+                  type="text"
+                  placeholder="e.g. Integration Practice"
+                  value={newExerciseName}
+                  onChange={e => setNewExerciseName(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#0052CC]"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700">Max Score</label>
+                <input
+                  required
+                  type="number"
+                  min="1"
+                  value={newExerciseMaxScore}
+                  onChange={e => setNewExerciseMaxScore(Number(e.target.value))}
+                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#0052CC]"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700">Exercise Material (optional)</label>
+                <input
+                  type="file"
+                  accept="application/pdf,image/jpeg,image/png"
+                  onChange={e => setNewExerciseFile(e.target.files?.[0])}
+                  className="w-full text-sm text-slate-600"
+                />
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowExerciseModal(false)}
+                  className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || courses.length === 0}
+                  className="rounded-xl bg-[#0052CC] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {saving ? "Creating..." : "Create Exercise"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       <div className="grid gap-4 sm:grid-cols-3">
         <Stat
           label="Class students"
@@ -887,227 +1322,6 @@ function DynamicTeacherWorkspace({
     </section>
   );
 }
-
-/* Legacy mock teacher dashboard retained only as historical markup; the active route uses DynamicTeacherWorkspace.
-function TeacherDashboard() {
-  const [className, setClassName] = useState("3AC Math");
-  const [classId, setClassId] = useState<number | null>(null);
-  const [savingAttendance, setSavingAttendance] = useState(false);
-  const [grade, setGrade] = useState<Record<string, string>>({
-    "Amine El Idrissi": "18",
-    "Salma Benali": "16",
-    "Youssef Alaoui": "19",
-  });
-  const [attendance, setAttendance] = useState<Record<string, boolean>>({
-    "Amine El Idrissi": true,
-    "Salma Benali": true,
-    "Youssef Alaoui": false,
-    "Nour El Amrani": true,
-  });
-  const roster = students.slice(0, 4);
-  useEffect(() => {
-    api
-      .getTeacher()
-      .then((teacher) => {
-        setClassId(teacher.classes[0]?.class_id ?? null);
-        setClassName(teacher.classes[0]?.name ?? "No assigned class");
-      })
-      .catch(() => undefined);
-  }, []);
-
-  const saveAttendance = async () => {
-    if (!classId || !roster.length) return;
-    setSavingAttendance(true);
-    try {
-      await api.saveAttendance(
-        classId,
-        new Date().toISOString().slice(0, 10),
-        roster.map((student) => ({
-          student_id: Number(
-            (student as typeof student & { student_id?: number }).student_id,
-          ),
-          status: attendance[student.name] ? "present" : "absent",
-        })),
-      );
-    } finally {
-      setSavingAttendance(false);
-    }
-  };
-  return (
-    <div id="overview" className="space-y-7">
-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-        <div id="my-classes">
-          <p className="mb-2 text-sm text-[#475569]">Active class</p>
-          <div className="relative">
-            <select
-              value={className}
-              onChange={(e) => setClassName(e.target.value)}
-              className="appearance-none rounded-xl border border-[#DBEAFE] bg-white py-3 pl-4 pr-12 text-sm font-semibold text-slate-800"
-            >
-              <option>3AC Math</option>
-              <option>1BAC Physics</option>
-            </select>
-            <ChevronDown
-              className="pointer-events-none absolute right-4 top-3.5 text-[#475569]"
-              size={16}
-            />
-          </div>
-        </div>
-        <button className="flex items-center gap-2 self-start rounded-xl bg-[#0052CC] px-4 py-3 text-xs font-bold text-white shadow-sm hover:bg-blue-800">
-          <Plus size={15} /> Create exercise
-        </button>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Stat
-          label="Class average"
-          value="15.8 / 20"
-          detail="Across 28 students"
-          icon={BarChart3}
-        />
-        <Stat
-          label="To grade"
-          value="8"
-          detail="Submissions pending"
-          icon={ClipboardCheck}
-        />
-        <Stat
-          label="Attendance today"
-          value="92%"
-          detail="26 present · 2 absent"
-          icon={CalendarDays}
-        />
-      </div>
-      <div className="grid gap-5 xl:grid-cols-[1.55fr_1fr]">
-        <section
-          id="submissions"
-          className="rounded-2xl border border-[#DBEAFE] bg-white"
-        >
-          <div className="flex flex-col justify-between gap-3 border-b border-[#DBEAFE] px-5 py-4 md:flex-row md:items-center">
-            <div>
-              <h2 className="font-bold text-[#0F172A]">Submissions</h2>
-              <p className="mt-1 text-xs text-[#475569]">
-                Exercise 1 — Equations · {className}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <select className="rounded-lg border border-[#DBEAFE] px-2 py-2 text-xs text-slate-600">
-                <option>Algebra</option>
-                <option>Geometry</option>
-              </select>
-              <select className="rounded-lg border border-[#DBEAFE] px-2 py-2 text-xs text-slate-600">
-                <option>Exercise 1</option>
-                <option>Exercise 2</option>
-              </select>
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-[#DBEAFE] text-[10px] uppercase tracking-wider text-[#475569]">
-                  <th className="px-5 py-3 font-semibold">Student</th>
-                  <th className="px-3 py-3 font-semibold">Submitted</th>
-                  <th className="px-3 py-3 font-semibold">Grade / 20</th>
-                  <th className="px-5 py-3" />
-                </tr>
-              </thead>
-              <tbody>
-                {roster.slice(0, 3).map((student) => (
-                  <tr
-                    key={student.name}
-                    className="border-b border-slate-50 last:border-0"
-                  >
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <Avatar
-                          initials={student.initials}
-                          className="h-8 w-8 text-[10px]"
-                        />
-                        <span className="text-xs font-semibold text-slate-700">
-                          {student.name}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 text-xs text-[#475569]">
-                      Today, 09:24
-                    </td>
-                    <td className="px-3 py-3">
-                      <input
-                        aria-label={`Grade for ${student.name}`}
-                        value={grade[student.name] ?? ""}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          if (+value <= 20)
-                            setGrade({ ...grade, [student.name]: value });
-                        }}
-                        className="w-14 rounded-lg border border-[#DBEAFE] px-2 py-1.5 text-xs font-bold text-slate-800 outline-none focus:border-blue-500"
-                      />
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <button className="rounded-lg p-2 text-[#475569] hover:bg-white hover:text-[#0052CC]">
-                        <Pencil size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-        <section
-          id="attendance"
-          className="rounded-2xl border border-[#DBEAFE] bg-white"
-        >
-          <div className="border-b border-[#DBEAFE] px-5 py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="font-bold text-[#0F172A]">Attendance</h2>
-                <p className="mt-1 text-xs text-[#475569]">
-                  Thursday, April 18, 2024
-                </p>
-              </div>
-              <button className="rounded-lg border border-[#DBEAFE] p-2 text-[#475569]">
-                <CalendarDays size={15} />
-              </button>
-            </div>
-            <button
-              onClick={saveAttendance}
-              disabled={savingAttendance || !classId}
-              className="mt-3 rounded-lg bg-[#0052CC] px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
-            >
-              {savingAttendance ? "Saving..." : "Save attendance"}
-            </button>
-          </div>
-          <div className="space-y-2 p-5">
-            {roster.map((student) => (
-              <div key={student.name} className="flex items-center gap-3">
-                <Avatar
-                  initials={student.initials}
-                  className="h-8 w-8 text-[10px]"
-                />
-                <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-700">
-                  {student.name}
-                </span>
-                <button
-                  onClick={() =>
-                    setAttendance({
-                      ...attendance,
-                      [student.name]: !attendance[student.name],
-                    })
-                  }
-                  className={`rounded-full px-3 py-1.5 text-[10px] font-bold ${attendance[student.name] ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-600"}`}
-                >
-                  {attendance[student.name] ? "Present" : "Absent"}
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-    </div>
-  );
-}
-
-*/
 
 function AdminDashboard({
   students,
@@ -1507,7 +1721,11 @@ function AdminWorkspace({
   const [query, setQuery] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [error, setError] = useState("");
-  const [report, setReport] = useState<Record<string, unknown> | null>(null);
+  const [classAssignmentTeacher, setClassAssignmentTeacher] =
+    useState<AdminTeacher | null>(null);
+  const [selectedClassIds, setSelectedClassIds] = useState<number[]>([]);
+  const [assignmentError, setAssignmentError] = useState("");
+  const [report, setReport] = useState<StudentReportData | null>(null);
   const [editing, setEditing] = useState<{ type: string; id: number } | null>(
     null,
   );
@@ -1533,26 +1751,39 @@ function AdminWorkspace({
         await api.createClass({
           name: String(data.get("name")),
           academic_year: String(data.get("academic_year")),
+          teacher_ids: data.getAll("teacher_ids").map(Number),
         });
-      if (tab === "Students")
+      if (tab === "Students") {
+        // Level and class_id must come from the SAME selected class, not
+        // from two independently-typed values. Courses are matched to
+        // students by an exact string comparison against `level`, so a
+        // free-typed level ("3ac", "3AC ", "3 AC"...) that doesn't exactly
+        // match a real class name silently orphans the student from every
+        // course/exercise in that class, even though class_id looks fine.
+        const selectedClassId = Number(data.get("class_id")) || undefined;
+        const selectedClass = classes.find(
+          (c) => c.class_id === selectedClassId,
+        );
+        if (!selectedClass) {
+          setError("Please select a class for the student.");
+          return;
+        }
         await api.createStudent({
           full_name: String(data.get("full_name")),
           email: String(data.get("email")),
           password: String(data.get("password")),
           phone_number: String(data.get("phone_number")),
-          level: String(data.get("level")),
-          class_id: Number(data.get("class_id")) || undefined,
+          level: selectedClass.name,
+          class_id: selectedClass.class_id,
         });
+      }
       if (tab === "Teachers")
         await api.createTeacher({
           full_name: String(data.get("full_name")),
           email: String(data.get("email")),
           password: String(data.get("password")),
           phone_number: String(data.get("phone_number")),
-          class_ids: String(data.get("class_ids") || "")
-            .split(",")
-            .map(Number)
-            .filter(Boolean),
+          class_ids: data.getAll("class_ids").map(Number),
         });
       setFormOpen(false);
       await reload();
@@ -1564,6 +1795,25 @@ function AdminWorkspace({
       );
     }
   };
+  const addClassesToTeacher = async () => {
+    if (!classAssignmentTeacher || selectedClassIds.length === 0) return;
+    setAssignmentError("");
+    try {
+      await api.assignTeacherClasses(
+        classAssignmentTeacher.teacher_id,
+        selectedClassIds,
+      );
+      setClassAssignmentTeacher(null);
+      setSelectedClassIds([]);
+      await reload();
+    } catch (assignmentSubmissionError) {
+      setAssignmentError(
+        assignmentSubmissionError instanceof Error
+          ? assignmentSubmissionError.message
+          : "Unable to assign classes.",
+      );
+    }
+  };
   const remove = async (type: string, id: number) => {
     if (!window.confirm("Delete this record?")) return;
     if (type === "student") await api.deleteStudent(id);
@@ -1572,7 +1822,7 @@ function AdminWorkspace({
     await reload();
   };
   return (
-    <section className="space-y-7">
+    <section id="overview" className="space-y-7">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-sm text-[#475569]">
@@ -1643,30 +1893,30 @@ function AdminWorkspace({
                     <p className="text-xs text-[#64748B]">
                       {item.email} · {item.className || "No class"}
                     </p>
+                    {!item.className && (
+                      <p className="mt-0.5 text-[11px] font-semibold text-amber-600">
+                        No class assigned — won't see any courses or exercises
+                      </p>
+                    )}
                   </div>
                   <button
                     onClick={() =>
+                      item.student_id &&
                       api
-                        .getStudentReport(
-                          students.find(
-                            (student) => student.email === item.email,
-                          )?.student_id ?? 0,
-                        )
-                        .then(setReport)
+                        .getStudentReport(item.student_id)
+                        .then((data) => setReport(data as StudentReportData))
                     }
-                    className="text-xs font-semibold text-[#0052CC]"
+                    disabled={!item.student_id}
+                    className="text-xs font-semibold text-[#0052CC] disabled:opacity-40"
                   >
                     Report
                   </button>
                   <button
                     onClick={() =>
-                      remove(
-                        "student",
-                        students.find((student) => student.email === item.email)
-                          ?.student_id ?? 0,
-                      )
+                      item.student_id && remove("student", item.student_id)
                     }
-                    className="text-xs text-rose-600"
+                    disabled={!item.student_id}
+                    className="text-xs text-rose-600 disabled:opacity-40"
                   >
                     Delete
                   </button>
@@ -1697,6 +1947,16 @@ function AdminWorkspace({
                       {item.email} · {item.classes.length} classes
                     </p>
                   </div>
+                  <button
+                    onClick={() => {
+                      setAssignmentError("");
+                      setSelectedClassIds([]);
+                      setClassAssignmentTeacher(item);
+                    }}
+                    className="text-xs font-semibold text-[#0052CC]"
+                  >
+                    Add class
+                  </button>
                   <button
                     onClick={() => remove("teacher", item.teacher_id)}
                     className="text-xs text-rose-600"
@@ -1755,6 +2015,24 @@ function AdminWorkspace({
                   placeholder="Academic year"
                   className="rounded-lg border border-[#DBEAFE] px-3 py-2 text-sm"
                 />
+                <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
+                  Assign teachers (optional)
+                  <select
+                    name="teacher_ids"
+                    multiple
+                    className="mt-1 min-h-24 w-full rounded-lg border border-[#DBEAFE] px-3 py-2 text-sm font-normal"
+                  >
+                    {teachers.length ? (
+                      teachers.map((teacher) => (
+                        <option key={teacher.teacher_id} value={teacher.teacher_id}>
+                          {teacher.full_name} · {teacher.email}
+                        </option>
+                      ))
+                    ) : (
+                      <option disabled>No teachers available</option>
+                    )}
+                  </select>
+                </label>
               </>
             ) : (
               <>
@@ -1785,40 +2063,706 @@ function AdminWorkspace({
                   className="rounded-lg border border-[#DBEAFE] px-3 py-2 text-sm"
                 />
                 {tab === "Students" ? (
-                  <input
-                    name="level"
+                  <select
+                    name="class_id"
                     required
-                    placeholder="Level"
+                    defaultValue=""
                     className="rounded-lg border border-[#DBEAFE] px-3 py-2 text-sm"
-                  />
+                  >
+                    <option value="" disabled>
+                      Select class
+                    </option>
+                    {classes.map((c) => (
+                      <option key={c.class_id} value={c.class_id}>
+                        {c.name} · {c.academic_year}
+                      </option>
+                    ))}
+                  </select>
                 ) : (
-                  <input
-                    name="class_ids"
-                    placeholder="Class IDs, comma separated"
-                    className="rounded-lg border border-[#DBEAFE] px-3 py-2 text-sm"
-                  />
+                  <label className="text-sm font-semibold text-slate-700">
+                    Assign existing classes (optional)
+                    <span className="mt-1 grid gap-2 rounded-lg border border-[#DBEAFE] p-3 font-normal">
+                      {classes.length ? classes.map((c) => (
+                        <label
+                          key={c.class_id}
+                          className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-[#EFF6FF]"
+                        >
+                          <input
+                            type="checkbox"
+                            name="class_ids"
+                            value={c.class_id}
+                            className="h-4 w-4 rounded border-slate-300 text-[#0052CC]"
+                          />
+                          <span>{c.name} · {c.academic_year}</span>
+                        </label>
+                      )) : <span className="text-sm text-slate-500">No classes available</span>}
+                    </span>
+                  </label>
                 )}
               </>
             )}
-            <button className="rounded-lg bg-[#0052CC] px-4 py-2 text-sm font-bold text-white">
+            {tab === "Students" && classes.length === 0 && (
+              <p className="text-sm text-amber-600 sm:col-span-2">
+                No classes exist yet. Create a class first so students can be
+                assigned to one.
+              </p>
+            )}
+            <button
+              disabled={tab === "Students" && classes.length === 0}
+              className="rounded-lg bg-[#0052CC] px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+            >
               Save
             </button>
             {error && <p className="text-sm text-rose-600">{error}</p>}
           </form>
         </div>
       )}
+      {classAssignmentTeacher && (
+        <div className="rounded-2xl border border-[#DBEAFE] bg-white p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="font-bold text-[#0F172A]">
+                Add class to {classAssignmentTeacher.full_name}
+              </h3>
+              <p className="mt-1 text-xs text-[#64748B]">
+                Select one or more classes that are not already assigned.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setClassAssignmentTeacher(null)}
+              className="text-sm text-slate-500"
+            >
+              Cancel
+            </button>
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            {classes.map((item) => {
+              const alreadyAssigned = classAssignmentTeacher.classes.some(
+                (assignedClass) => assignedClass.class_id === item.class_id,
+              );
+              return (
+                <label
+                  key={item.class_id}
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${alreadyAssigned ? "cursor-not-allowed border-slate-100 bg-slate-50 text-slate-400" : "cursor-pointer border-[#DBEAFE] hover:bg-[#EFF6FF]"}`}
+                >
+                  <input
+                    type="checkbox"
+                    disabled={alreadyAssigned}
+                    checked={selectedClassIds.includes(item.class_id)}
+                    onChange={(event) =>
+                      setSelectedClassIds((current) =>
+                        event.target.checked
+                          ? [...current, item.class_id]
+                          : current.filter((id) => id !== item.class_id),
+                      )
+                    }
+                    className="h-4 w-4 rounded border-slate-300 text-[#0052CC]"
+                  />
+                  <span>
+                    {item.name} · {item.academic_year}
+                    {alreadyAssigned ? " (already assigned)" : ""}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+          {assignmentError && (
+            <p className="mt-3 text-sm text-rose-600">{assignmentError}</p>
+          )}
+          <button
+            type="button"
+            onClick={addClassesToTeacher}
+            disabled={!selectedClassIds.length}
+            className="mt-4 rounded-lg bg-[#0052CC] px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+          >
+            Add selected classes
+          </button>
+        </div>
+      )}
       {report && (
         <div className="rounded-2xl border border-[#DBEAFE] bg-white p-5">
           <div className="flex justify-between">
-            <h3 className="font-bold">Academic report</h3>
+            <h3 className="font-bold text-[#0F172A]">
+              Academic report — {report.name}
+            </h3>
             <button onClick={() => setReport(null)} className="text-[#0052CC]">
               Close
             </button>
           </div>
-          <pre className="mt-3 overflow-auto text-xs">
-            {JSON.stringify(report, null, 2)}
-          </pre>
+
+          {(() => {
+            // AdminStudentReportResponse only gives us exercises_and_exams
+            // (with a nullable score) and class_info. There is no
+            // submissions/attendance data on this endpoint — don't fake it.
+            const exercisesAndExams = report.exercises_and_exams ?? [];
+            const avgScore = computeAverage(exercisesAndExams);
+            const gradedCount = exercisesAndExams.filter(
+              (e) => e.score !== null && e.score !== undefined,
+            ).length;
+
+            return (
+              <>
+                <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                  <Stat
+                    label="Average grade"
+                    value={avgScore !== null ? avgScore.toFixed(1) : "-"}
+                    icon={BarChart3}
+                  />
+                  <Stat
+                    label="Graded exercises"
+                    value={`${gradedCount} / ${exercisesAndExams.length}`}
+                    icon={ClipboardCheck}
+                  />
+                  <Stat
+                    label="Class"
+                    value={report.class_info?.name ?? "-"}
+                    detail={report.class_info?.academic_year}
+                    icon={CalendarDays}
+                  />
+                </div>
+
+                <div className="mt-5">
+                  <h4 className="text-sm font-bold text-[#0F172A]">
+                    Grades by exercise
+                  </h4>
+                  {exercisesAndExams.length ? (
+                    <div className="mt-2 divide-y divide-slate-100">
+                      {exercisesAndExams.map((entry) => (
+                        <div
+                          key={entry.exercise_id}
+                          className="flex justify-between py-2 text-sm"
+                        >
+                          <span className="text-slate-700">
+                            {entry.exercise_name}
+                          </span>
+                          <strong className="text-[#0052CC]">
+                            {entry.score !== null ? entry.score : "-"}
+                          </strong>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm text-[#64748B]">
+                      No exercises recorded.
+                    </p>
+                  )}
+                </div>
+              </>
+            );
+          })()}
         </div>
+      )}
+    </section>
+  );
+}
+
+// ---- Reports helpers -------------------------------------------------
+
+interface StudentReportCacheEntry {
+  loading: boolean;
+  error?: string;
+  data?: StudentReportData;
+}
+
+function normalizeClassLabel(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function reportCacheKey(student: AdminStudent) {
+  return student.student_id !== undefined
+    ? `id:${student.student_id}`
+    : `email:${student.email}`;
+}
+
+// Averages over exercises_and_exams entries, ignoring ungraded (null score)
+// exercises. This matches AdminStudentReportResponse's real shape — there
+// is no separate "grades" array from the backend.
+function computeAverage(
+  entries: { score: number | null }[] | undefined,
+) {
+  if (!entries || !entries.length) return null;
+  const graded = entries.filter(
+    (entry): entry is { score: number } =>
+      entry.score !== null && entry.score !== undefined,
+  );
+  if (!graded.length) return null;
+  return graded.reduce((sum, entry) => sum + entry.score, 0) / graded.length;
+}
+
+function StudentReportModal({
+  student,
+  entry,
+  onClose,
+}: {
+  student: AdminStudent;
+  entry: StudentReportCacheEntry | undefined;
+  onClose: () => void;
+}) {
+  const exercisesAndExams = entry?.data?.exercises_and_exams ?? [];
+
+  const rows = exercisesAndExams.map((item, index) => ({
+    label: `Ex ${index + 1}`,
+    name: item.exercise_name,
+    score: item.score,
+  }));
+
+  const chartData = rows.map((row) => ({
+    name: row.label,
+    score: row.score ?? 0,
+  }));
+
+  const average = computeAverage(exercisesAndExams);
+  const gradedCount = exercisesAndExams.filter(
+    (e) => e.score !== null && e.score !== undefined,
+  ).length;
+  const downloadPdf = () => {
+    const document = new jsPDF();
+    const className = entry?.data?.class_info?.name ?? student.className ?? "No class";
+    const academicYear = entry?.data?.class_info?.academic_year ?? "";
+    const safeName = student.name.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "");
+    const pageWidth = document.internal.pageSize.getWidth();
+    const scoreMax = 20;
+
+    document.setTextColor(15, 23, 42);
+    document.setFontSize(20);
+    document.text("Student Academic Report", 20, 22);
+    document.setFontSize(12);
+    document.text(`Name: ${student.name}`, 20, 34);
+    document.text(`Email: ${student.email}`, 20, 42);
+    document.text(`Class / level: ${className}${academicYear ? ` (${academicYear})` : ""}`, 20, 50);
+    document.setDrawColor(219, 234, 254);
+    document.line(20, 57, pageWidth - 20, 57);
+
+    document.setFontSize(12);
+    document.text(`Average score: ${average !== null ? average.toFixed(2) : "N/A"}`, 20, 68);
+    document.text(`Result: ${gradedCount} of ${exercisesAndExams.length} exercises graded`, 20, 76);
+
+    document.setFontSize(14);
+    document.text("Score graph", 20, 92);
+    const graphX = 28;
+    const graphY = 105;
+    const graphWidth = pageWidth - 48;
+    const graphHeight = 62;
+    document.setDrawColor(148, 163, 184);
+    document.line(graphX, graphY, graphX, graphY + graphHeight);
+    document.line(graphX, graphY + graphHeight, graphX + graphWidth, graphY + graphHeight);
+    document.setFontSize(8);
+    document.text("20", graphX - 8, graphY + 3);
+    document.text("0", graphX - 5, graphY + graphHeight + 3);
+    const points = exercisesAndExams.map((item, index) => {
+      const score = item.score ?? 0;
+      const x = graphX + ((index + 1) / Math.max(exercisesAndExams.length, 1)) * graphWidth;
+      const y = graphY + graphHeight - (Math.max(0, Math.min(score, scoreMax)) / scoreMax) * graphHeight;
+      return { x, y, score };
+    });
+    document.setDrawColor(0, 82, 204);
+    document.setFillColor(0, 82, 204);
+    points.forEach((point, index) => {
+      if (index > 0) document.line(points[index - 1].x, points[index - 1].y, point.x, point.y);
+      document.circle(point.x, point.y, 1.5, "F");
+      document.setFontSize(7);
+      document.text(`Ex ${index + 1}`, point.x - 5, graphY + graphHeight + 10);
+    });
+
+    let y = 195;
+    document.setTextColor(15, 23, 42);
+    document.setFontSize(14);
+    document.text("Exercises and grades", 20, y);
+    y += 10;
+    document.setFontSize(10);
+    document.setFillColor(239, 246, 255);
+    document.rect(20, y - 6, pageWidth - 40, 9, "F");
+    document.text("#", 23, y);
+    document.text("Exercise", 38, y);
+    document.text("Score", pageWidth - 45, y);
+    y += 10;
+    exercisesAndExams.forEach((item, index) => {
+      if (y > 275) {
+        document.addPage();
+        y = 22;
+      }
+      document.setDrawColor(226, 232, 240);
+      document.line(20, y + 3, pageWidth - 20, y + 3);
+      document.text(String(index + 1), 23, y);
+      const exerciseName = document.splitTextToSize(item.exercise_name, pageWidth - 85);
+      document.text(exerciseName, 38, y);
+      document.text(item.score === null ? "N/A" : String(item.score), pageWidth - 45, y);
+      y += Math.max(10, exerciseName.length * 5 + 3);
+    });
+
+    document.setFontSize(8);
+    document.setTextColor(100, 116, 139);
+    document.text("Generated by EduInsight AI", 20, 290);
+    document.save(`student-report-${safeName || "student"}.pdf`);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-xl font-bold text-[#0F172A]">
+              {student.name}
+            </h3>
+            <p className="mt-1 text-sm text-[#64748B]">
+              {student.email} · {student.className || "No class"}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {!entry?.loading && !entry?.error && (
+              <button
+                onClick={downloadPdf}
+                className="rounded-lg bg-[#0052CC] px-3 py-2 text-xs font-bold text-white hover:bg-blue-700"
+              >
+                Download PDF
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="rounded-lg p-2 text-[#475569] hover:bg-slate-50"
+              aria-label="Close report"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        {entry?.loading ? (
+          <p className="mt-6 text-sm text-[#64748B]">Loading report...</p>
+        ) : entry?.error ? (
+          <p className="mt-6 text-sm text-rose-600">{entry.error}</p>
+        ) : (
+          <>
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <Stat
+                label="Average score"
+                value={average !== null ? average.toFixed(2) : "-"}
+                icon={BarChart3}
+              />
+              <Stat
+                label="Graded exercises"
+                value={`${gradedCount} / ${exercisesAndExams.length}`}
+                icon={ClipboardCheck}
+              />
+            </div>
+
+            <div className="mt-6">
+              <h4 className="text-sm font-bold text-[#0F172A]">
+                Progress across exercises
+              </h4>
+              {chartData.length ? (
+                <div className="mt-3 h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                      <YAxis domain={[0, 20]} tick={{ fontSize: 11 }} />
+                      <Tooltip />
+                      <Line
+                        type="monotone"
+                        dataKey="score"
+                        stroke="#0052CC"
+                        strokeWidth={2}
+                        dot={{ r: 4 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-[#64748B]">
+                  No exercises available for this student yet.
+                </p>
+              )}
+            </div>
+
+            <div className="mt-6">
+              <h4 className="text-sm font-bold text-[#0F172A]">
+                Grades by exercise
+              </h4>
+              {rows.length ? (
+                <div className="mt-2 overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-[10px] uppercase tracking-wider text-[#475569]">
+                        <th className="py-2 pr-3 font-semibold">#</th>
+                        <th className="py-2 pr-3 font-semibold">Exercise</th>
+                        <th className="py-2 text-right font-semibold">
+                          Score
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {rows.map((row) => (
+                        <tr key={row.label}>
+                          <td className="py-2 pr-3 font-semibold text-slate-500">
+                            {row.label}
+                          </td>
+                          <td className="py-2 pr-3 text-slate-700">
+                            {row.name}
+                          </td>
+                          <td className="py-2 text-right font-bold text-[#0052CC]">
+                            {row.score !== null ? row.score : "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-[#64748B]">
+                  No grades recorded yet.
+                </p>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AdminReports({ students }: { students: AdminStudent[] }) {
+  // Distinct class labels derived purely from real student data
+  // (student.className, sourced from the API's level field), e.g. "3AC", "1BAC".
+  const classNames = Array.from(
+    new Set(
+      students
+        .map((student) => student.className)
+        .filter((name): name is string => Boolean(name && name.trim())),
+    ),
+  );
+
+  const [selectedClass, setSelectedClass] = useState("");
+  const [reportsByStudent, setReportsByStudent] = useState<
+    Record<string, StudentReportCacheEntry>
+  >({});
+  const [loadingClass, setLoadingClass] = useState(false);
+  const [activeReportStudent, setActiveReportStudent] =
+    useState<AdminStudent | null>(null);
+
+  useEffect(() => {
+    if (!selectedClass && classNames.length) {
+      setSelectedClass(classNames[0]);
+    }
+  }, [classNames, selectedClass]);
+
+  // Normalized comparison (trim + lowercase) fixes the "0 students" bug
+  // caused by case or whitespace mismatches between the tab label and the
+  // stored class name (e.g. "3AC Math" vs "3ac math").
+  const classStudents = students.filter(
+    (student) =>
+      normalizeClassLabel(student.className || "") ===
+      normalizeClassLabel(selectedClass),
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const studentsNeedingFetch = classStudents.filter(
+      (student) =>
+        student.student_id !== undefined &&
+        !reportsByStudent[reportCacheKey(student)],
+    );
+    if (!studentsNeedingFetch.length) return;
+    setLoadingClass(true);
+    Promise.all(
+      studentsNeedingFetch.map(async (student) => {
+        const key = reportCacheKey(student);
+        try {
+          const data = (await api.getStudentReport(
+            student.student_id as number,
+          )) as StudentReportData;
+          return [key, { loading: false, data }] as const;
+        } catch {
+          return [
+            key,
+            { loading: false, error: "Failed to load report." },
+          ] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) return;
+      setReportsByStudent((prev) => ({
+        ...prev,
+        ...Object.fromEntries(entries),
+      }));
+      setLoadingClass(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // classStudents/reportsByStudent are derived each render; keying off
+    // selectedClass + students avoids an identity-based effect loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedClass, students]);
+
+  const ranked = [...classStudents].sort((a, b) => {
+    const avgA =
+      computeAverage(
+        reportsByStudent[reportCacheKey(a)]?.data?.exercises_and_exams,
+      ) ?? -Infinity;
+    const avgB =
+      computeAverage(
+        reportsByStudent[reportCacheKey(b)]?.data?.exercises_and_exams,
+      ) ?? -Infinity;
+    return avgB - avgA;
+  });
+
+  const validAverages = ranked
+    .map((student) =>
+      computeAverage(
+        reportsByStudent[reportCacheKey(student)]?.data?.exercises_and_exams,
+      ),
+    )
+    .filter((value): value is number => value !== null);
+  const classAverage = validAverages.length
+    ? validAverages.reduce((sum, value) => sum + value, 0) /
+    validAverages.length
+    : null;
+
+  const openReport = async (student: AdminStudent) => {
+    setActiveReportStudent(student);
+    const key = reportCacheKey(student);
+    if (!reportsByStudent[key] && student.student_id !== undefined) {
+      setReportsByStudent((prev) => ({ ...prev, [key]: { loading: true } }));
+      try {
+        const data = (await api.getStudentReport(
+          student.student_id,
+        )) as StudentReportData;
+        setReportsByStudent((prev) => ({
+          ...prev,
+          [key]: { loading: false, data },
+        }));
+      } catch {
+        setReportsByStudent((prev) => ({
+          ...prev,
+          [key]: { loading: false, error: "Failed to load report." },
+        }));
+      }
+    }
+  };
+
+  return (
+    <section id="reports" className="space-y-7">
+      <div>
+        <p className="text-sm text-[#475569]">Academic performance overview</p>
+        <h2 className="mt-1 text-2xl font-bold tracking-tight text-[#0F172A]">
+          Reports
+        </h2>
+      </div>
+
+      {classNames.length ? (
+        <div className="flex flex-wrap gap-1 rounded-lg bg-[#EFF6FF] p-1">
+          {classNames.map((name) => (
+            <button
+              key={name}
+              onClick={() => setSelectedClass(name)}
+              className={`rounded-md px-4 py-2 text-xs font-bold ${normalizeClassLabel(selectedClass) === normalizeClassLabel(name)
+                ? "bg-white text-[#0052CC] shadow-sm"
+                : "text-[#475569]"
+                }`}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-[#64748B]">
+          No classes available yet. Add students to see class reports.
+        </p>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Stat
+          label="Selected class"
+          value={selectedClass || "-"}
+          icon={BookOpen}
+        />
+        <Stat
+          label="Students in class"
+          value={String(classStudents.length)}
+          icon={Users}
+        />
+        <Stat
+          label="Class average"
+          value={classAverage !== null ? classAverage.toFixed(2) : "-"}
+          detail={loadingClass ? "Calculating..." : undefined}
+          icon={BarChart3}
+        />
+      </div>
+
+      <div className="rounded-2xl border border-[#DBEAFE] bg-white">
+        <div className="border-b border-[#DBEAFE] p-5">
+          <h3 className="font-bold text-[#0F172A]">
+            {selectedClass
+              ? `${selectedClass} — Class Ranking`
+              : "Class Ranking"}
+          </h3>
+          <p className="mt-1 text-xs text-[#64748B]">
+            Ranked by average score across all graded exercises. Students
+            without grades yet still appear, ranked last.
+          </p>
+        </div>
+        {ranked.length ? (
+          <div className="divide-y divide-slate-100">
+            {ranked.map((student, index) => {
+              const entry = reportsByStudent[reportCacheKey(student)];
+              const average = computeAverage(
+                entry?.data?.exercises_and_exams,
+              );
+              return (
+                <div
+                  key={student.email}
+                  className="flex flex-wrap items-center gap-4 px-5 py-4"
+                >
+                  <div
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${index === 0
+                      ? "bg-[#0052CC] text-white"
+                      : "bg-[#EFF6FF] text-[#0052CC]"
+                      }`}
+                  >
+                    {index + 1}
+                  </div>
+                  <Avatar initials={student.initials} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-800">
+                      {student.name}
+                    </p>
+                    <p className="truncate text-xs text-[#64748B]">
+                      {student.email}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-sm font-bold text-[#0052CC]">
+                    {entry?.loading
+                      ? "..."
+                      : average !== null
+                        ? average.toFixed(2)
+                        : "N/A"}
+                  </span>
+                  <button
+                    onClick={() => openReport(student)}
+                    disabled={!student.student_id}
+                    className="shrink-0 rounded-lg border border-[#DBEAFE] px-3 py-1.5 text-xs font-bold text-[#0052CC] transition hover:bg-[#EFF6FF] disabled:opacity-40"
+                  >
+                    Get Report
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="p-5 text-sm text-[#64748B]">
+            No students found in this class.
+          </p>
+        )}
+      </div>
+
+      {activeReportStudent && (
+        <StudentReportModal
+          student={activeReportStudent}
+          entry={reportsByStudent[reportCacheKey(activeReportStudent)]}
+          onClose={() => setActiveReportStudent(null)}
+        />
       )}
     </section>
   );
@@ -1841,17 +2785,37 @@ function DynamicStudentWorkspace({
 }) {
   const [tab, setTab] = useState("Courses");
   const [feedback, setFeedback] = useState("");
-  const submit = async (exerciseId: number) => {
-    const filePath = window.prompt("Submission text or file path");
-    if (!filePath) return;
-    await api.createSubmission({
-      exercise_id: exerciseId,
-      file_path: filePath,
-    });
-    setFeedback("Submission sent successfully.");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingExerciseId = useRef<number | null>(null);
+  const chooseSubmissionFile = (exerciseId: number) => {
+    pendingExerciseId.current = exerciseId;
+    fileInputRef.current?.click();
+  };
+  const handleSubmissionFile = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    const exerciseId = pendingExerciseId.current;
+    event.target.value = "";
+    pendingExerciseId.current = null;
+    if (!file || exerciseId === null) return;
+
+    try {
+      await api.createSubmission({ exercise_id: exerciseId, file });
+      setFeedback("Submission sent successfully.");
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Submission failed.");
+    }
   };
   return (
     <section className="space-y-7">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/pdf,image/jpeg,image/png"
+        className="hidden"
+        onChange={handleSubmissionFile}
+      />
       <div>
         <p className="text-sm text-[#64748B]">Student workspace</p>
         <h2 className="mt-1 text-2xl font-bold text-[#0F172A]">
@@ -1905,7 +2869,7 @@ function DynamicStudentWorkspace({
                         {exercise.exercise_name}
                       </span>
                       <button
-                        onClick={() => submit(exercise.exercise_id)}
+                        onClick={() => chooseSubmissionFile(exercise.exercise_id)}
                         className="text-xs font-semibold text-[#0052CC]"
                       >
                         Submit
@@ -1996,6 +2960,8 @@ function ClassicStudentWorkspace({
   notifications: StudentNotification[];
 }) {
   const [feedback, setFeedback] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingExerciseId = useRef<number | null>(null);
   const submittedIds = new Set(submissions.map((item) => item.exercise_id));
   const average = grades.length
     ? grades.reduce((sum, item) => sum + item.score, 0) / grades.length
@@ -2018,14 +2984,25 @@ function ClassicStudentWorkspace({
   const privateFeedback = notifications.filter((item) =>
     item.title.toLowerCase().includes("feedback"),
   );
-  const submitExercise = async (exerciseId: number) => {
-    const filePath = window.prompt("Enter submission text or file path");
-    if (!filePath) return;
-    await api.createSubmission({
-      exercise_id: exerciseId,
-      file_path: filePath,
-    });
-    setFeedback("Exercise submitted successfully.");
+  const submitExercise = (exerciseId: number) => {
+    pendingExerciseId.current = exerciseId;
+    fileInputRef.current?.click();
+  };
+  const handleSubmissionFile = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    const exerciseId = pendingExerciseId.current;
+    event.target.value = "";
+    pendingExerciseId.current = null;
+    if (!file || exerciseId === null) return;
+
+    try {
+      await api.createSubmission({ exercise_id: exerciseId, file });
+      setFeedback("Exercise submitted successfully.");
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Submission failed.");
+    }
   };
 
   if (active === "Progress")
@@ -2111,6 +3088,13 @@ function ClassicStudentWorkspace({
     );
   return (
     <section className="space-y-5">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/pdf,image/jpeg,image/png"
+        className="hidden"
+        onChange={handleSubmissionFile}
+      />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-sm text-[#64748B]">Active classroom</p>
@@ -2279,12 +3263,8 @@ function ConnectedApp() {
     [],
   );
   const [teacherGrades, setTeacherGrades] = useState<Grade[]>([]);
-  const [teacherAttendance, setTeacherAttendance] = useState<
-    AttendanceRecord[]
-  >([]);
-  const [teacherNotifications, setTeacherNotifications] = useState<
-    TeacherNotification[]
-  >([]);
+  const [teacherAttendance, setTeacherAttendance] = useState<AttendanceRecord[]>([]);
+  const [teacherNotifications, setTeacherNotifications] = useState<TeacherNotification[]>([]);
   const [studentProfile, setStudentProfile] = useState<ApiStudent | null>(null);
   const [studentCourses, setStudentCourses] = useState<Course[]>([]);
   const [studentExercises, setStudentExercises] = useState<Exercise[]>([]);
@@ -2292,9 +3272,7 @@ function ConnectedApp() {
   const [studentSubmissions, setStudentSubmissions] = useState<Submission[]>(
     [],
   );
-  const [studentNotifications, setStudentNotifications] = useState<
-    StudentNotification[]
-  >([]);
+  const [studentNotifications, setStudentNotifications] = useState<StudentNotification[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [active, setActive] = useState("Overview");
   const reloadAdmin = async () => {
@@ -2305,6 +3283,7 @@ function ConnectedApp() {
     ]);
     setAdminStudents(
       apiStudents.map((student) => ({
+        student_id: student.student_id,
         name: student.full_name,
         email: student.email,
         className: student.level ?? "",
@@ -2360,6 +3339,7 @@ function ConnectedApp() {
           setUserName(profile.full_name);
           setAdminStudents(
             apiStudents.map((student) => ({
+              student_id: student.student_id,
               name: student.full_name,
               email: student.email,
               className: student.level ?? "",
@@ -2388,18 +3368,17 @@ function ConnectedApp() {
             .toUpperCase(),
         }));
       }
-      if (sessionRole === "teacher") {
-        const teacher = await api.getTeacher();
+
+      const loadTeacherData = async (teacherObj: Teacher) => {
         const [
           classStudentGroups,
           apiCourses,
           apiExercises,
           apiGrades,
           apiAttendance,
-          allNotifications,
         ] = await Promise.all([
           Promise.all(
-            teacher.classes.map((item) =>
+            teacherObj.classes.map((item) =>
               api.getAttendanceStudents(item.class_id),
             ),
           ),
@@ -2407,22 +3386,29 @@ function ConnectedApp() {
           api.getTeacherExercises(),
           api.getTeacherGrades(),
           api.getTeacherAttendance(),
-          api.getNotifications(),
         ]);
         if (!cancelled) {
-          setUserName(teacher.full_name);
-          setTeacherData(teacher);
+          setUserName(teacherObj.full_name);
+          setTeacherData(teacherObj);
           setTeacherStudents(classStudentGroups.flat());
           setTeacherCourses(apiCourses);
           setTeacherExercises(apiExercises);
           setTeacherGrades(apiGrades);
           setTeacherAttendance(apiAttendance);
-          setTeacherNotifications(
-            allNotifications.filter(
-              (item) => item.teacher_id === teacher.teacher_id,
-            ),
-          );
+          setTeacherNotifications([]); // Clear feed to prevent student notifications from leaking to teacher
         }
+      };
+
+      if (sessionRole === "teacher") {
+        const teacher = await api.getTeacher();
+        await loadTeacherData(teacher);
+
+        // Expose reload globally for the workspace to use
+        (window as any).reloadTeacherData = async () => {
+          cancelled = false;
+          const t = await api.getTeacher();
+          await loadTeacherData(t);
+        };
       }
       if (sessionRole === "student") {
         const [
@@ -2526,6 +3512,11 @@ function ConnectedApp() {
                 exercises={teacherExercises}
                 grades={teacherGrades}
                 attendance={teacherAttendance}
+                reload={async () => {
+                  if ((window as any).reloadTeacherData) {
+                    await (window as any).reloadTeacherData();
+                  }
+                }}
                 onAttendanceSaved={async () => {
                   if (teacherData)
                     setTeacherAttendance(await api.getTeacherAttendance());
@@ -2536,6 +3527,8 @@ function ConnectedApp() {
                 Loading teacher workspace...
               </p>
             )
+          ) : active === "Reports" ? (
+            <AdminReports students={adminStudents} />
           ) : (
             <AdminWorkspace
               students={adminStudents}

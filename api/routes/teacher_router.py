@@ -1,12 +1,14 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, File, Form, HTTPException, Depends, UploadFile
 
 from api.dependencies import (
     teacher_controller,
     require_teacher,
     course_controller,
     exercise_controller,
-    student_controller
+    student_controller,
+    db,
 )
+from utils.submission_storage import save_material_file
 
 from api.schemas.teacher_schema import (
     TeacherResponse,
@@ -90,7 +92,8 @@ def get_my_courses(
             "course_id": course.course_id,
             "course_name": course.course_name,
             "semester": course.semester,
-            "level": course.level
+            "level": course.level,
+            "material_file_path": _material_path("course", course.course_id),
         }
         for course in courses
     ]
@@ -117,16 +120,28 @@ def get_my_exercises(
                 "max_score": exercise.max_score,
                 "course_name": exercise.course.course_name,
                 "semester": exercise.course.semester
-            }
+            },
+            "material_file_path": _material_path("exercise", exercise.exercise_id),
         }
         for exercise in exercises
     ]
+
+def _material_path(owner_type: str, owner_id: int):
+    row = db.cursor.execute(
+        "SELECT file_path FROM learning_materials WHERE owner_type = ? AND owner_id = ? ORDER BY material_id DESC LIMIT 1",
+        (owner_type, owner_id),
+    ).fetchone()
+    return row[0] if row else None
+
 
 from api.schemas.course_schema import TeacherCourseCreate
 
 @router.post("/me/courses")
 def create_my_course(
-    data: TeacherCourseCreate,
+    course_name: str = Form(...),
+    class_id: int = Form(...),
+    semester: str = Form(...),
+    file: UploadFile | None = File(None),
     current_user=Depends(require_teacher)
 ):
     try:
@@ -134,7 +149,7 @@ def create_my_course(
             (
                 class_group
                 for class_group in current_user.classes
-                if class_group.class_id == data.class_id
+                if class_group.class_id == class_id
             ),
             None,
         )
@@ -142,11 +157,24 @@ def create_my_course(
             raise ValueError("You can only create courses for your assigned classes.")
 
         result = course_controller.create_course(
-            data.course_name,
+            course_name,
             current_user.teacher_id,
             class_group.name,
-            data.semester
+            semester
         )
+
+        if file:
+            course = db.cursor.execute(
+                "SELECT course_id FROM courses WHERE teacher_id = ? AND course_name = ? ORDER BY course_id DESC LIMIT 1",
+                (current_user.teacher_id, course_name),
+            ).fetchone()
+            if course:
+                file_path = save_material_file(file, "course", course[0])
+                db.cursor.execute(
+                    "INSERT INTO learning_materials (owner_type, owner_id, file_path) VALUES (?, ?, ?)",
+                    ("course", course[0], file_path),
+                )
+                db.connection.commit()
 
         return {
             "message": result
@@ -163,18 +191,34 @@ from api.schemas.exercise_schema import TeacherExerciseCreate
 
 @router.post("/me/exercises")
 def create_my_exercise(
-    data: TeacherExerciseCreate,
+    exercise_name: str = Form(...),
+    course_id: int = Form(...),
+    max_score: float = Form(20),
+    file: UploadFile | None = File(None),
     current_user=Depends(require_teacher)
 ):
 
     try:
 
         result = exercise_controller.create_exercise(
-            data.exercise_name,
-            data.course_id,
+            exercise_name,
+            course_id,
             current_user.teacher_id,
-            data.max_score,
+            max_score,
         )
+
+        if file:
+            exercise = db.cursor.execute(
+                "SELECT exercise_id FROM exercises WHERE course_id = ? AND exercise_name = ? ORDER BY exercise_id DESC LIMIT 1",
+                (course_id, exercise_name),
+            ).fetchone()
+            if exercise:
+                file_path = save_material_file(file, "exercise", exercise[0])
+                db.cursor.execute(
+                    "INSERT INTO learning_materials (owner_type, owner_id, file_path) VALUES (?, ?, ?)",
+                    ("exercise", exercise[0], file_path),
+                )
+                db.connection.commit()
 
         return {
             "message": result
@@ -198,9 +242,35 @@ def get_my_students(
             "full_name": student.full_name,
             "email": student.email,
             "phone_number": student.phone_number,
-            "level": student.level
+            "level": student.level,
+            "class_id": student.class_id
         }
         for student in students
+    ]
+
+
+@router.get("/me/submissions")
+def get_my_submissions(
+    current_user=Depends(require_teacher)
+):
+    from api.dependencies import submission_controller
+    try:
+        submissions = submission_controller.get_submissions_by_teacher(
+            current_user.teacher_id
+        )
+    except ValueError:
+        return []
+
+    return [
+        {
+            "submission_id": submission.submission_id,
+            "student_id": submission.student.student_id,
+            "exercise_id": submission.exercise.exercise_id,
+            "submission_date": str(submission.submission_date),
+            "file_path": submission.file_path,
+            "status": submission.status
+        }
+        for submission in submissions
     ]
 
 from api.schemas.grade_schema import GradeCreate
@@ -329,11 +399,17 @@ def send_notification_to_students(
     data: TeacherNotificationCreate,
     current_user=Depends(require_teacher)
 ):
-
+    """Broadcast an announcement to all students in the teacher's assigned classes."""
     try:
+        class_ids = [c.class_id for c in current_user.classes]
+        if not class_ids:
+            raise ValueError("You have no assigned classes to send notifications to.")
 
-        result = notification_controller.send_notification_to_students(
+        # Create a single notification and send it only to students in teacher's classes
+        from services.notification_service import NotificationService
+        result = notification_controller.send_notification_to_class_students(
             current_user.teacher_id,
+            class_ids,
             data.title,
             data.message
         )

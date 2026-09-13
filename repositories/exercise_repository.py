@@ -80,26 +80,45 @@ class ExerciseRepo:
         return self._select(" WHERE UPPER(TRIM(courses.level)) = ?", (level.strip().upper(),))
 
     def get_exercises_by_level_for_student(self, level, student_id):
+        """Fetch all exercises whose course level matches any class that
+        has academic_year equal to the student's level.  This works even
+        when the student has no class_id – we derive the correct
+        course-level from the classes table.
+
+        Also LEFT JOINs grades and submissions so each exercise carries
+        the student's score and submission status.
+        """
         query = """
             SELECT exercises.exercise_id, exercises.exercise_name,
                    courses.course_id, courses.course_name, exercises.max_score,
                    courses.semester, courses.level,
                    teachers.teacher_id, teachers.full_name, teachers.email,
                    teachers.password, teachers.phone_number,
-                   grades.score
+                   grades.score,
+                   submissions.submission_id,
+                   submissions.status
             FROM exercises
             JOIN courses ON exercises.course_id = courses.course_id
             JOIN teachers ON courses.teacher_id = teachers.teacher_id
+            JOIN classes
+                ON UPPER(TRIM(courses.level)) = UPPER(TRIM(classes.name))
             LEFT JOIN grades
                 ON grades.exercise_id = exercises.exercise_id
                AND grades.student_id = ?
-            WHERE UPPER(TRIM(courses.level)) = ?
+            LEFT JOIN submissions
+                ON submissions.exercise_id = exercises.exercise_id
+               AND submissions.student_id = ?
+            WHERE UPPER(TRIM(classes.academic_year)) = ?
         """
-        self.db.cursor.execute(query, (student_id, level.strip().upper()))
+        self.db.cursor.execute(
+            query, (student_id, student_id, level.strip().upper())
+        )
         exercises = []
         for row in self.db.cursor.fetchall():
             exercise = self._from_row(row[:12])
             exercise.score = row[12]
+            exercise.submission_id = row[13]
+            exercise.submission_status = row[14] if row[14] else "pending"
             exercises.append(exercise)
         return exercises
 
@@ -110,7 +129,9 @@ class ExerciseRepo:
                    courses.semester, courses.level,
                    teachers.teacher_id, teachers.full_name, teachers.email,
                    teachers.password, teachers.phone_number,
-                   grades.score
+                   grades.score,
+                   submissions.submission_id,
+                   submissions.status
             FROM exercises
             JOIN courses ON exercises.course_id = courses.course_id
             JOIN classes
@@ -119,13 +140,18 @@ class ExerciseRepo:
             LEFT JOIN grades
                 ON grades.exercise_id = exercises.exercise_id
                AND grades.student_id = ?
+            LEFT JOIN submissions
+                ON submissions.exercise_id = exercises.exercise_id
+               AND submissions.student_id = ?
             WHERE classes.id = ?
         """
-        self.db.cursor.execute(query, (student_id, class_id))
+        self.db.cursor.execute(query, (student_id, student_id, class_id))
         exercises = []
         for row in self.db.cursor.fetchall():
             exercise = self._from_row(row[:12])
             exercise.score = row[12]
+            exercise.submission_id = row[13]
+            exercise.submission_status = row[14] if row[14] else "pending"
             exercises.append(exercise)
         return exercises
 

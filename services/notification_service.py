@@ -45,6 +45,21 @@ class NotificationService:
         notification = self.create_notification(title, message, teacher_id)
         return self.send_to_all_students(notification)
 
+    def send_notification_to_class_students(self, teacher_id, class_ids, title, message):
+        """Send a broadcast notification only to students enrolled in the given classes."""
+        notification = self.create_notification(title, message, teacher_id)
+        students = []
+        for class_id in class_ids:
+            class_students = self.student_repo.get_students_by_class_id(class_id)
+            students.extend(class_students)
+        if not students:
+            raise ValueError("No students found in your assigned classes.")
+        for student in students:
+            self.student_notification_repo.add_student_notification(
+                StudentNotification(None, student, notification)
+            )
+        return f"Announcement sent to {len(students)} student(s) in your classes."
+
     def send_notification_to_student(self, teacher_id, student_id, title, message):
         notification = self.create_notification(title, message, teacher_id)
         return self.send_to_student(notification, student_id)

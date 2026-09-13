@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from utils.submission_storage import UPLOAD_ROOT
 from api.routes.student_router import router as student_router
 from api.routes.teacher_router import router as teacher_router
 from api.routes.course_router import router as course_router
@@ -18,6 +20,9 @@ app = FastAPI(
     description="Backend API for EduAnalytics",
     version="1.0.0"
 )
+
+UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_ROOT), name="uploads")
 
 app.add_middleware(
     CORSMiddleware,

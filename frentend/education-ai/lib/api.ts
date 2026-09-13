@@ -1,8 +1,10 @@
-const API_BASE_URL = (
-  process.env.NEXT_PUBLIC_API_BASE_URL ??
-  process.env.VITE_API_BASE_URL ??
-  "http://127.0.0.1:8000"
-).replace(/\/$/, "");
+const rawUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.VITE_API_BASE_URL;
+const DIRECT_URL = (!rawUrl || rawUrl === "/" ? "http://127.0.0.1:8000" : rawUrl).replace(/\/$/, "");
+// In the browser, use the Next.js proxy to avoid CORS. On the server (SSR), call directly.
+const API_BASE_URL = typeof window !== "undefined" ? "/api-proxy" : DIRECT_URL;
+export const getFileUrl = (filePath: string) =>
+  typeof window === "undefined" ? `${DIRECT_URL}${filePath}` : `/api-proxy${filePath}`;
+
 
 export type Role = "admin" | "teacher" | "student";
 
@@ -65,12 +67,14 @@ export type TeacherCourse = {
   course_name: string;
   semester: string;
   level: string;
+  material_file_path?: string | null;
 };
 export type TeacherExercise = {
   exercise_id: number;
   exercise_name: string;
   max_score: number;
   course: { course_id: number; course_name: string; semester: string };
+  material_file_path?: string | null;
 };
 export type Submission = {
   submission_id: number;
@@ -115,7 +119,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token =
     typeof window === "undefined" ? null : localStorage.getItem(TOKEN_KEY);
   const headers = new Headers(init.headers);
-  headers.set("Content-Type", "application/json");
+  if (!(typeof FormData !== "undefined" && init.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
   const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
@@ -189,20 +195,34 @@ export const api = {
     course_name: string;
     class_id: number;
     semester: string;
-  }) =>
-    request<{ message: string }>("/teachers/me/courses", {
+    file?: File;
+  }) => {
+    const formData = new FormData();
+    formData.append("course_name", data.course_name);
+    formData.append("class_id", String(data.class_id));
+    formData.append("semester", data.semester);
+    if (data.file) formData.append("file", data.file);
+    return request<{ message: string }>("/teachers/me/courses", {
       method: "POST",
-      body: JSON.stringify(data),
-    }),
+      body: formData,
+    });
+  },
   createExercise: (data: {
     exercise_name: string;
     course_id: number;
     max_score: number;
-  }) =>
-    request<{ message: string }>("/teachers/me/exercises", {
+    file?: File;
+  }) => {
+    const formData = new FormData();
+    formData.append("exercise_name", data.exercise_name);
+    formData.append("course_id", String(data.course_id));
+    formData.append("max_score", String(data.max_score));
+    if (data.file) formData.append("file", data.file);
+    return request<{ message: string }>("/teachers/me/exercises", {
       method: "POST",
-      body: JSON.stringify(data),
-    }),
+      body: formData,
+    });
+  },
   sendClassAnnouncement: (data: { title: string; message: string }) =>
     request<{ message: string }>("/teachers/me/notifications", {
       method: "POST",
@@ -241,6 +261,8 @@ export const api = {
       `/teachers/me/attendance${classId || month ? `?${new URLSearchParams({ ...(classId ? { class_id: String(classId) } : {}), ...(month ? { month } : {}) })}` : ""}`,
     ),
   getTeacherGrades: () => request<Grade[]>("/teachers/me/grades"),
+  getExerciseSubmissions: (exerciseId: number) =>
+    request<Submission[]>(`/submissions/exercise/${exerciseId}`),
   createGrades: (
     grades: { score: number; student_id: number; exercise_id: number }[],
   ) =>
@@ -263,11 +285,16 @@ export const api = {
   getStudentGrades: () => request<Grade[]>("/students/me/grades"),
   getStudentSubmissions: () =>
     request<Submission[]>("/students/me/submissions"),
-  createSubmission: (data: { exercise_id: number; file_path: string }) =>
-    request<Submission>("/students/me/submissions", {
+  createSubmission: (data: { exercise_id: number; file: File }) => {
+    const formData = new FormData();
+    formData.append("exercise_id", String(data.exercise_id));
+    formData.append("file", data.file);
+
+    return request<Submission>("/students/me/submissions", {
       method: "POST",
-      body: JSON.stringify(data),
-    }),
+      body: formData,
+    });
+  },
   getStudentNotifications: () =>
     request<StudentNotification[]>("/students/me/notifications"),
   updateStudentProfile: (
@@ -306,7 +333,11 @@ export const api = {
       `/admin/teachers/search?full_name=${encodeURIComponent(fullName)}`,
     ),
   getClasses: () => request<ApiClass[]>("/admin/classes"),
-  createClass: (data: { name: string; academic_year: string }) =>
+  createClass: (data: {
+    name: string;
+    academic_year: string;
+    teacher_ids?: number[];
+  }) =>
     request<ApiClass>("/admin/classes", {
       method: "POST",
       body: JSON.stringify(data),

@@ -1,7 +1,6 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from api.schemas.submission_schema import (
-    SubmissionCreate,
     SubmissionUpdate,
     SubmissionResponse
 )
@@ -9,6 +8,10 @@ from api.schemas.submission_schema import (
 from api.dependencies import submission_controller
 from api.dependencies import require_student
 from fastapi import Depends
+from utils.submission_storage import (
+    delete_submission_file,
+    save_submission_file,
+)
 
 
 router = APIRouter(
@@ -33,14 +36,23 @@ def submission_to_response(submission):
     "/",
     response_model=dict
 )
-def create_submission(data: SubmissionCreate, current_user=Depends(require_student)):
+def create_submission(
+    exercise_id: int = Form(...),
+    file: UploadFile = File(...),
+    current_user=Depends(require_student)
+):
 
     try:
+        file_path = save_submission_file(
+            file,
+            exercise_id,
+            current_user.student_id
+        )
 
         result = submission_controller.create_submission(
             current_user.student_id,
-            data.exercise_id,
-            data.file_path
+            exercise_id,
+            file_path
         )
 
         return {
@@ -48,6 +60,9 @@ def create_submission(data: SubmissionCreate, current_user=Depends(require_stude
         }
 
     except ValueError as error:
+
+        if "file_path" in locals():
+            delete_submission_file(file_path)
 
         raise HTTPException(
             status_code=400,

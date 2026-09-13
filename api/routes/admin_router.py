@@ -97,7 +97,22 @@ def update_my_profile(data: AdminProfileUpdate, admin=Depends(get_current_admin)
 @router.post("/classes", response_model=ClassResponse)
 def create_class(data: ClassCreate, _admin=Depends(get_current_admin)):
     try:
-        return class_response(class_controller.create_class(data.name, data.academic_year))
+        selected_teachers = [
+            teacher_controller.get_teacher(teacher_id)
+            for teacher_id in data.teacher_ids
+        ]
+        created_class = class_controller.create_class(data.name, data.academic_year)
+        for teacher in selected_teachers:
+            existing_class_ids = [
+                class_group.class_id for class_group in teacher.classes
+            ]
+            if created_class.class_id not in existing_class_ids:
+                existing_class_ids.append(created_class.class_id)
+            admin_controller.assign_teacher_to_classes(
+                teacher.teacher_id,
+                existing_class_ids,
+            )
+        return class_response(created_class)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
 
@@ -216,6 +231,23 @@ def delete_teacher(teacher_id: int, _admin=Depends(get_current_admin)):
 @router.post("/teachers/{teacher_id}/classes")
 def assign_teacher(teacher_id: int, data: TeacherClassAssignment, _admin=Depends(get_current_admin)):
     try:
-        return {"message": admin_controller.assign_teacher_to_classes(teacher_id, data.class_ids)}
+        teacher = teacher_controller.get_teacher(teacher_id)
+        existing_class_ids = {
+            class_group.class_id for class_group in teacher.classes
+        }
+        duplicate_class_ids = existing_class_ids.intersection(data.class_ids)
+        if duplicate_class_ids:
+            duplicate_ids = ", ".join(
+                str(class_id) for class_id in sorted(duplicate_class_ids)
+            )
+            raise ValueError(
+                f"Teacher is already assigned to class ID(s): {duplicate_ids}."
+            )
+
+        all_class_ids = [*existing_class_ids, *data.class_ids]
+        return {"message": admin_controller.assign_teacher_to_classes(
+            teacher_id,
+            all_class_ids,
+        )}
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
