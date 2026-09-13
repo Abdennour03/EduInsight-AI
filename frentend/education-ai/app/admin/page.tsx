@@ -1,1 +1,5 @@
-export { default } from '../page'
+import AdminWorkspace from "../../components/admin/AdminWorkspace";
+
+export default function AdminPage() {
+	return <AdminWorkspace />;
+}

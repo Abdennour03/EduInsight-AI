@@ -23,7 +23,21 @@ def get_my_profile(
     return student_controller.get_my_profile(current_user)
 from api.dependencies import require_student
 from fastapi import Depends
-from api.dependencies import course_controller
+from api.dependencies import course_controller, db
+
+
+def material_path(owner_type: str, owner_id: int):
+    row = db.cursor.execute(
+        """
+        SELECT file_path
+        FROM learning_materials
+        WHERE owner_type = ? AND owner_id = ?
+        ORDER BY material_id DESC
+        LIMIT 1
+        """,
+        (owner_type, owner_id),
+    ).fetchone()
+    return row[0] if row else None
 
 @router.get("/me/courses")
 def get_my_courses(
@@ -53,7 +67,8 @@ def get_my_courses(
             "teacher": {
                 "teacher_id": course.teacher.teacher_id,
                 "full_name": course.teacher.full_name
-            }
+            },
+            "material_file_path": material_path("course", course.course_id),
         }
         for course in courses
     ]
@@ -81,6 +96,7 @@ def get_my_exercises(
                 "course_name": exercise.course.course_name,
                 "semester": exercise.course.semester
             },
+            "material_file_path": material_path("exercise", exercise.exercise_id),
             "max_score": exercise.max_score,
             "score": getattr(exercise, "score", None),
             "submission_status": getattr(exercise, "submission_status", "pending"),

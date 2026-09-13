@@ -39,12 +39,14 @@ export type Course = {
   semester?: string;
   level?: string;
   teacher?: { teacher_id: number; full_name: string };
+  material_file_path?: string | null;
 };
 
 export type Exercise = {
   exercise_id: number;
   exercise_name: string;
   course?: { course_id: number; course_name: string; semester?: string };
+  material_file_path?: string | null;
 };
 
 export type Grade = {

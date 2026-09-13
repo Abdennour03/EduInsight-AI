@@ -9,3 +9,4 @@ class StudentExerciseResponse(BaseModel):
     max_score: Optional[float] = None
     score: Optional[float] = None
     submission_status: str = "pending"
+    material_file_path: Optional[str] = None
