@@ -1,6 +1,7 @@
 'use client'
 
 import { FormEvent, useState } from 'react'
+import Link from 'next/link'
 import { BookOpen, Eye, EyeOff } from 'lucide-react'
 
 import { api } from '../../lib/api'
@@ -82,9 +83,11 @@ export default function LoginPage() {
 					</button>
 				</form>
 				<div className="my-7 border-t border-[#DBEAFE]" />
-				<button type="button" onClick={() => { setIsSetup(value => !value); setError(''); setShowPassword(false); setShowConfirmPassword(false) }} className="block w-full text-center text-sm font-semibold text-[#0052CC] hover:underline">
-					{isSetup ? 'Back to Sign In' : 'First time setup? Create Admin Account'}
-				</button>
+				{isSetup ? <button type="button" onClick={() => { setIsSetup(false); setError(''); setShowPassword(false); setShowConfirmPassword(false) }} className="block w-full text-center text-sm font-semibold text-[#0052CC] hover:underline">
+					Back to Sign In
+				</button> : <Link href="/setup" className="block w-full text-center text-sm font-semibold text-[#0052CC] hover:underline">
+					First time setup? Create Admin Account
+				</Link>}
 			</div>
 		</main>
 	)
