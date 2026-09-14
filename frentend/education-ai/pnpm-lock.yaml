@@ -1,0 +1,69 @@
+lockfileVersion: '6.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+dependencies:
+  '@base-ui/react':
+    specifier: ^1.5.0
+    version: 1.5.0
+  '@vercel/analytics':
+    specifier: 1.6.1
+    version: 1.6.1
+  class-variance-authority:
+    specifier: ^0.7.1
+    version: 0.7.1
+  clsx:
+    specifier: ^2.1.1
+    version: 2.1.1
+  jspdf:
+    specifier: ^4.2.1
+    version: 4.2.1
+  lucide-react:
+    specifier: ^1.16.0
+    version: 1.16.0
+  next:
+    specifier: 16.3.3
+    version: 16.3.3
+  react:
+    specifier: 19.2.4
+    version: 19.2.4
+  react-dom:
+    specifier: 19.2.4
+    version: 19.2.4
+  recharts:
+    specifier: ^3.10.1
+    version: 3.10.1
+  shadcn:
+    specifier: ^4.11.0
+    version: 4.11.0
+  tailwind-merge:
+    specifier: ^3.3.1
+    version: 3.3.1
+  tw-animate-css:
+    specifier: ^1.4.0
+    version: 1.4.0
+
+devDependencies:
+  '@tailwindcss/postcss':
+    specifier: ^4.3.3
+    version: 4.3.3
+  '@types/node':
+    specifier: ^24
+    version: 24.0.0
+  '@types/react':
+    specifier: 19.2.14
+    version: 19.2.14
+  '@types/react-dom':
+    specifier: 19.2.3
+    version: 19.2.3
+  postcss:
+    specifier: ^8.5
+    version: 8.5.0
+  tailwindcss:
+    specifier: ^4.3.3
+    version: 4.3.3
+  typescript:
+    specifier: 5.7.3
+    version: 5.7.3
