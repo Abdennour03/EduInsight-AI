@@ -15,7 +15,8 @@ export default function SetupPage() {
     setError('')
     setMessage('')
     setSubmitting(true)
-    const form = new FormData(event.currentTarget)
+    const formElement = event.currentTarget
+    const form = new FormData(formElement)
 
     try {
       await api.setupAdmin({
@@ -24,7 +25,7 @@ export default function SetupPage() {
         password: String(form.get('password') ?? ''),
       })
       setMessage('Admin environment created. You can sign in now.')
-      event.currentTarget.reset()
+      formElement.reset()
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'Unable to create the admin environment.')
     } finally {

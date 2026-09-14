@@ -9,6 +9,7 @@ import { api } from '../../lib/api'
 export default function LoginPage() {
 	const [isSetup, setIsSetup] = useState(false)
 	const [error, setError] = useState('')
+	const [message, setMessage] = useState('')
 	const [submitting, setSubmitting] = useState(false)
 	const [showPassword, setShowPassword] = useState(false)
 	const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -16,6 +17,7 @@ export default function LoginPage() {
 	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault()
 		setError('')
+		setMessage('')
 		setSubmitting(true)
 		const form = new FormData(event.currentTarget)
 
@@ -31,7 +33,7 @@ export default function LoginPage() {
 				setIsSetup(false)
 				setShowPassword(false)
 				setShowConfirmPassword(false)
-				setError('Admin account created. Sign in to continue.')
+				setMessage('Admin account created. Sign in to continue.')
 			} else {
 				const session = await api.login(email, password)
 				api.saveSession(session)
@@ -78,16 +80,20 @@ export default function LoginPage() {
 						<span className="font-semibold text-[#0052CC]">Forgot password?</span>
 					</div>}
 					{error && <p className="text-sm font-semibold text-red-600">{error}</p>}
+					{message && <p className="text-sm font-semibold text-green-700">{message}</p>}
 					<button disabled={submitting} className="w-full rounded-xl bg-[#0052CC] px-4 py-3.5 text-base font-bold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60">
 						{submitting ? (isSetup ? 'Registering...' : 'Signing in...') : (isSetup ? 'Register Admin' : 'Sign In')}
 					</button>
 				</form>
 				<div className="my-7 border-t border-[#DBEAFE]" />
-				{isSetup ? <button type="button" onClick={() => { setIsSetup(false); setError(''); setShowPassword(false); setShowConfirmPassword(false) }} className="block w-full text-center text-sm font-semibold text-[#0052CC] hover:underline">
+				{isSetup ? <button type="button" onClick={() => { setIsSetup(false); setError(''); setMessage(''); setShowPassword(false); setShowConfirmPassword(false) }} className="block w-full text-center text-sm font-semibold text-[#0052CC] hover:underline">
 					Back to Sign In
 				</button> : <Link href="/setup" className="block w-full text-center text-sm font-semibold text-[#0052CC] hover:underline">
 					First time setup? Create Admin Account
 				</Link>}
+				<p className="mt-3 text-center text-xs leading-5 text-[#64748B]">
+					Only administrators can create accounts. Students and teachers must be added by an administrator.
+				</p>
 			</div>
 		</main>
 	)
