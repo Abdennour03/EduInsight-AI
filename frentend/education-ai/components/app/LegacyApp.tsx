@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
   api,
@@ -1532,22 +1533,12 @@ function Login({ setRole }: { setRole: (role: Role) => void }) {
     setError("");
     const form = new FormData(event.currentTarget);
     try {
-      const response = await fetch("/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: form.get("email"),
-          password: form.get("password"),
-          rememberMe: form.get("rememberMe") === "on",
-        }),
-      });
-      if (!response.ok) throw new Error("Invalid email or password");
-      const data = await response.json();
-      const role = String(data.role ?? data.user?.role ?? "").toLowerCase();
-      if (role === "admin") window.location.href = "/admin";
-      else if (role === "teacher") window.location.href = "/teacher";
-      else if (role === "student") window.location.href = "/student";
-      else throw new Error("Your account role could not be verified");
+      const session = await api.login(
+        String(form.get("email") ?? ""),
+        String(form.get("password") ?? ""),
+      );
+      api.saveSession(session);
+      window.location.href = `/${session.role}`;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to sign in");
     }
@@ -1695,7 +1686,9 @@ function Login({ setRole }: { setRole: (role: Role) => void }) {
             ))}
           </div>
           <div className="mt-8 border-t border-[#DBEAFE] pt-6 text-center text-xs text-[#475569]">
-            Demo mode · No account required
+            <Link href="/setup" className="font-semibold text-[#0052CC] hover:underline">
+              First time setup? Create Admin Account
+            </Link>
           </div>
         </div>
       </div>
