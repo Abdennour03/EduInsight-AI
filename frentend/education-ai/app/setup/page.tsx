@@ -38,8 +38,8 @@ export default function SetupPage() {
       <div className="w-full max-w-md rounded-xl border border-[#CBD5E1] bg-white p-6 shadow-[0_2px_5px_rgba(15,23,42,.12)] sm:p-8">
         <div className="mb-7">
           <p className="text-xs font-bold uppercase tracking-[.2em] text-[#0052CC]">EduInsight AI</p>
-          <h1 className="mt-2 text-2xl font-bold text-[#0F172A]">Create admin environment</h1>
-          <p className="mt-2 text-sm leading-6 text-[#475569]">Create the first administrator account, then use the admin workspace to add classes, students, and teachers.</p>
+          <h1 className="mt-2 text-2xl font-bold text-[#0F172A]">Create the first admin account</h1>
+          <p className="mt-2 text-sm leading-6 text-[#475569]">Only the first administrator can be created here. That administrator adds classes, students, and teachers from the workspace.</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <label className="block text-sm font-semibold text-[#0F172A]">

@@ -89,10 +89,10 @@ export default function LoginPage() {
 				{isSetup ? <button type="button" onClick={() => { setIsSetup(false); setError(''); setMessage(''); setShowPassword(false); setShowConfirmPassword(false) }} className="block w-full text-center text-sm font-semibold text-[#0052CC] hover:underline">
 					Back to Sign In
 				</button> : <Link href="/setup" className="block w-full text-center text-sm font-semibold text-[#0052CC] hover:underline">
-					First time setup? Create Admin Account
+					Create the First Admin Account
 				</Link>}
 				<p className="mt-3 text-center text-xs leading-5 text-[#64748B]">
-					Only administrators can create accounts. Students and teachers must be added by an administrator.
+					This creates the first administrator only. Students and teachers must be added by the administrator.
 				</p>
 			</div>
 		</main>

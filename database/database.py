@@ -279,41 +279,6 @@ class Database:
                        created_at = COALESCE(created_at, CURRENT_TIMESTAMP)
                    WHERE id IS NULL OR password_hash IS NULL OR created_at IS NULL"""
             )
-        self.cursor.execute(
-            "SELECT 1 FROM admins WHERE email = ? LIMIT 1",
-            ("admin@eduinsight.ai",),
-        )
-        if self.cursor.fetchone() is None:
-            from utils.security import hash_password
-
-            password_hash = hash_password("adminpassword")
-            admin_id = self.cursor.execute(
-                "SELECT COALESCE(MAX(id), 0) + 1 FROM admins"
-            ).fetchone()[0]
-            if "password" in admin_columns:
-                self.cursor.execute(
-                    """INSERT INTO admins
-                       (id, email, password, password_hash, full_name, created_at)
-                       VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
-                    (
-                        admin_id,
-                        "admin@eduinsight.ai",
-                        password_hash,
-                        password_hash,
-                        "EduInsight Administrator",
-                    ),
-                )
-            else:
-                self.cursor.execute(
-                          """INSERT INTO admins (id, email, password_hash, full_name)
-                              VALUES (?, ?, ?, ?)""",
-                    (
-                                admin_id,
-                        "admin@eduinsight.ai",
-                        password_hash,
-                        "EduInsight Administrator",
-                    ),
-                )
         self.connection.commit()
 
     def close(self):

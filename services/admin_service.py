@@ -17,8 +17,11 @@ class AdminService:
         return admin
 
     def setup_admin(self, full_name, email, password):
-        if self.admin_repo.get_admin_by_email(email):
-            raise ValueError("Admin with this email already exists.")
+        if self.admin_repo.has_admins():
+            raise ValueError(
+                "The administrator account is already initialized. "
+                "Students and teachers must be added by the existing administrator."
+            )
         return self.create_admin(full_name, email, password)
 
     def get_admin(self, admin_id):

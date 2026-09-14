@@ -42,6 +42,9 @@ class AdminRepo:
         row = self.db.cursor.fetchone()
         return Admin(row[0], row[1], row[2], row[3], row[4]) if row else None
 
+    def has_admins(self):
+        return self.db.cursor.execute("SELECT 1 FROM admins LIMIT 1").fetchone() is not None
+
     def get_all_admins(self):
         self.db.cursor.execute(
             "SELECT id, full_name, email, password_hash, created_at FROM admins"
