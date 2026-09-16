@@ -119,12 +119,16 @@ class NotificationService:
     def count_notifications(self):
         return self.notification_repo.count_notifications()
 
-    def get_student_notifications(self, student_id):
-        if self.student_repo.get_student(student_id) is None:
+    def get_student_notifications(self, student_id, organization_id=None):
+        if self.student_repo.get_student(student_id, organization_id=organization_id) is None:
             raise ValueError("Student not found.")
-        return self.student_notification_repo.get_notifications_for_student(student_id)
+        return self.student_notification_repo.get_notifications_for_student(student_id, organization_id)
 
-    def mark_as_read(self, student_notification_id):
-        if not self.student_notification_repo.mark_as_read(student_notification_id):
+    def mark_as_read(self, student_notification_id, student_id=None, organization_id=None):
+        if not self.student_notification_repo.mark_as_read(
+            student_notification_id,
+            student_id,
+            organization_id,
+        ):
             raise ValueError("Student notification not found.")
         return "Notification marked as read."

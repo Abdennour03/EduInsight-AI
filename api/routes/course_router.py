@@ -6,7 +6,7 @@ from api.schemas.course_schema import (
     CourseUpdate
 )
 
-from api.dependencies import course_controller, require_teacher
+from api.dependencies import course_controller, get_current_user, require_teacher
 from fastapi import Depends
 
 
@@ -17,9 +17,9 @@ router = APIRouter(
 
 
 @router.get("/", response_model=list[CourseResponse])
-def get_all_courses():
+def get_all_courses(current_user=Depends(get_current_user)):
 
-    courses = course_controller.get_all_courses()
+    courses = course_controller.get_all_courses(current_user.organization_id)
 
     return [
         {
@@ -55,9 +55,9 @@ def create_course(data: CourseCreate, current_user=Depends(require_teacher)):
 
 
 @router.get("/search")
-def search_courses(query: str):
+def search_courses(query: str, current_user=Depends(get_current_user)):
 
-    courses = course_controller.search_course(query)
+    courses = course_controller.search_course(query, current_user.organization_id)
 
     return [
         {
@@ -72,9 +72,9 @@ def search_courses(query: str):
 
 
 @router.get("/count")
-def count_courses():
+def count_courses(current_user=Depends(get_current_user)):
 
-    count = course_controller.count_courses()
+    count = course_controller.count_courses(current_user.organization_id)
 
     return {
         "count": count
@@ -82,9 +82,9 @@ def count_courses():
 
 
 @router.get("/{course_id}", response_model=CourseResponse)
-def get_course(course_id: int):
+def get_course(course_id: int, current_user=Depends(get_current_user)):
 
-    course = course_controller.get_course(course_id)
+    course = course_controller.get_course(course_id, current_user.organization_id)
 
     if course is None:
         raise HTTPException(

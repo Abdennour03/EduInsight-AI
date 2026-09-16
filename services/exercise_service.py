@@ -35,17 +35,17 @@ class ExerciseService:
 
         return "Exercise created successfully."
 
-    def get_exercise(self, exercise_id):
+    def get_exercise(self, exercise_id, organization_id=None):
 
         if not isinstance(exercise_id, int):
             raise ValueError("exercise ID must be an int")
-        exercise = self.exercise_repo.get_exercise(exercise_id)
+        exercise = self.exercise_repo.get_exercise(exercise_id, organization_id)
         if exercise is None:
             raise ValueError("exercise not found.")
         return exercise
 
-    def get_all_exercises(self):
-        return self.exercise_repo.get_all_exercises()
+    def get_all_exercises(self, organization_id=None):
+        return self.exercise_repo.get_all_exercises(organization_id)
 
     def update_exercise(self, exercise_id, teacher_id=None, **kwargs):
         exercise = self.exercise_repo.get_exercise(exercise_id)
@@ -78,18 +78,18 @@ class ExerciseService:
         self.exercise_repo.delete_exercise(exercise_id)
         return "exercise deleted successfully"
 
-    def search_exercise(self, query):
+    def search_exercise(self, query, organization_id=None):
         query = query.strip()
         if not query:
             raise ValueError("Search query cannot be empty.")
 
-        exercises = self.exercise_repo.search_exercise(query)
+        exercises = self.exercise_repo.search_exercise(query, organization_id)
         if not exercises:
             raise ValueError("No exercise found.")
         return exercises
 
-    def count_exercise(self):
-        return self.exercise_repo.count_exercises()
+    def count_exercise(self, organization_id=None):
+        return self.exercise_repo.count_exercises(organization_id)
 
     def get_exercises_by_level(self, level):
 
@@ -97,11 +97,12 @@ class ExerciseService:
 
         return self.exercise_repo.get_exercises_by_level(level)
 
-    def get_exercises_by_teacher(self, teacher_id):
+    def get_exercises_by_teacher(self, teacher_id, organization_id=None):
 
         if not isinstance(teacher_id, int):
             raise ValueError("Teacher ID must be an int.")
 
         return self.exercise_repo.get_exercises_by_teacher(
-            teacher_id
+            teacher_id,
+            organization_id,
         )

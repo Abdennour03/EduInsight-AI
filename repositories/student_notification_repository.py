@@ -10,15 +10,17 @@ class StudentNotificationRepo:
 
 
     def add_student_notification(self, student_notification):
+        organization_id = getattr(student_notification.student, "organization_id", None)
 
         self.db.cursor.execute("""
             INSERT INTO student_notifications
-            (student_id, notification_id, is_read)
-            VALUES (?, ?, ?)
+            (student_id, notification_id, is_read, organization_id)
+            VALUES (?, ?, ?, ?)
         """, (
             student_notification.student.student_id,
             student_notification.notification.notification_id,
-            int(student_notification.is_read)
+            int(student_notification.is_read),
+            organization_id,
         ))
 
         self.db.connection.commit()
@@ -28,17 +30,17 @@ class StudentNotificationRepo:
         )
 
 
-    def get_notifications_for_student(self, student_id):
+    def get_notifications_for_student(self, student_id, organization_id=None):
 
         self.db.cursor.execute("""
             SELECT
                 student_notification_id,
                 student_id,
                 notification_id,
-                is_read
+                is_read, organization_id
             FROM student_notifications
-            WHERE student_id = ?
-        """, (student_id,))
+            WHERE student_id = ?""" + (" AND organization_id = ?" if organization_id is not None else ""),
+            (student_id, organization_id) if organization_id is not None else (student_id,))
 
         rows = self.db.cursor.fetchall()
 
@@ -64,12 +66,11 @@ class StudentNotificationRepo:
             if notification_row is None:
                 continue
 
-            notification = self.notification_repo.get_notification(
-                notification_id
-            )
+            notification = self.notification_repo.get_notification(notification_id, organization_id)
 
             student = self.student_repo.get_student(
-                row[1]
+                row[1],
+                organization_id=organization_id,
             )
 
             if student is None:
@@ -87,13 +88,16 @@ class StudentNotificationRepo:
         return result
 
 
-    def mark_as_read(self, student_notification_id):
+    def mark_as_read(self, student_notification_id, student_id=None, organization_id=None):
 
         self.db.cursor.execute("""
             UPDATE student_notifications
             SET is_read = 1
-            WHERE student_notification_id = ?
-        """, (student_notification_id,))
+            WHERE student_notification_id = ?"""
+            + (" AND student_id = ?" if student_id is not None else "")
+            + (" AND organization_id = ?" if organization_id is not None else ""),
+            tuple(value for value in (student_notification_id, student_id, organization_id) if value is not None),
+        )
 
         self.db.connection.commit()
 

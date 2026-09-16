@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from api.schemas.notification_schema import (
     NotificationResponse,
@@ -6,7 +6,7 @@ from api.schemas.notification_schema import (
     NotificationUpdate
 )
 
-from api.dependencies import notification_controller
+from api.dependencies import get_current_user, notification_controller
 
 
 router = APIRouter(
@@ -39,7 +39,7 @@ def notification_to_response(notification):
     }
 
 @router.get("/", response_model=list[NotificationResponse])
-def get_all_notifications():
+def get_all_notifications(current_user=Depends(get_current_user)):
 
     notifications = notification_controller.get_all_notifications()
 
@@ -49,7 +49,7 @@ def get_all_notifications():
     ]
 
 @router.get("/{notification_id}", response_model=NotificationResponse)
-def get_notification(notification_id: int):
+def get_notification(notification_id: int, current_user=Depends(get_current_user)):
 
     try:
 
@@ -67,7 +67,7 @@ def get_notification(notification_id: int):
         )
 
 @router.post("/")
-def create_notification(data: NotificationCreate):
+def create_notification(data: NotificationCreate, current_user=Depends(get_current_user)):
 
     try:
         notification = notification_controller.create_notification(
@@ -94,7 +94,8 @@ def create_notification(data: NotificationCreate):
 @router.put("/{notification_id}")
 def update_notification(
     notification_id: int,
-    data: NotificationUpdate
+    data: NotificationUpdate,
+    current_user=Depends(get_current_user),
 ):
 
     try:
@@ -118,7 +119,7 @@ def update_notification(
         )
 
 @router.get("/search")
-def search_notifications(query: str):
+def search_notifications(query: str, current_user=Depends(get_current_user)):
 
     try:
 
@@ -140,7 +141,7 @@ def search_notifications(query: str):
 
 
 @router.get("/count")
-def count_notifications():
+def count_notifications(current_user=Depends(get_current_user)):
 
     return {
         "count": notification_controller.count_notifications()

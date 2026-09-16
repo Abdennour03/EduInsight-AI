@@ -17,8 +17,8 @@ class StudentController:
     def get_students_by_class_ids(self, class_ids):
         return self.student_service.get_students_by_class_ids(class_ids)
 
-    def get_my_exercises(self, student_id, class_id):
-        return self.student_service.get_my_exercises(student_id, class_id)
+    def get_my_exercises(self, student_id, class_id, organization_id=None):
+        return self.student_service.get_my_exercises(student_id, class_id, organization_id)
     
     def update_student(self, student_id, **kwargs):
         return self.student_service.update_student(student_id, **kwargs)

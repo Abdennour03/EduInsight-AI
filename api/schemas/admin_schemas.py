@@ -16,6 +16,7 @@ class ClassResponse(BaseModel):
     class_id: int
     name: str
     academic_year: str
+    organization_id: int | None = None
 
 
 class AdminStudentCreate(BaseModel):

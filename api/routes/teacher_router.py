@@ -2,6 +2,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Depends, UploadFile
 
 from api.dependencies import (
     teacher_controller,
+    get_current_admin,
     require_teacher,
     course_controller,
     exercise_controller,
@@ -84,7 +85,8 @@ def get_my_courses(
 ):
 
     courses = course_controller.get_courses_by_teacher(
-        current_user.teacher_id
+        current_user.teacher_id,
+        current_user.organization_id,
     )
 
     return [
@@ -108,7 +110,8 @@ def get_my_exercises(
 ):
 
     exercises = exercise_controller.get_exercises_by_teacher(
-        current_user.teacher_id
+        current_user.teacher_id,
+        current_user.organization_id,
     )
 
     return [
@@ -256,7 +259,8 @@ def get_my_submissions(
     from api.dependencies import submission_controller
     try:
         submissions = submission_controller.get_submissions_by_teacher(
-            current_user.teacher_id
+            current_user.teacher_id,
+            current_user.organization_id,
         )
     except ValueError:
         return []
@@ -294,7 +298,8 @@ def get_my_grades(
 ):
 
     grades = grade_controller.get_grades_by_teacher(
-        current_user.teacher_id
+        current_user.teacher_id,
+        current_user.organization_id,
     )
 
     return [
@@ -322,7 +327,8 @@ def add_grade_to_student(
                 grade_data.score,
                 grade_data.student_id,
                 grade_data.exercise_id,
-                current_user.teacher_id
+                current_user.teacher_id,
+                current_user.organization_id,
             )
 
         return {
@@ -458,7 +464,7 @@ def send_notification_to_student(
         )
         
 @router.get("/", response_model=list[TeacherResponse])
-def get_all_teachers():
+def get_all_teachers(_admin=Depends(get_current_admin)):
 
     teachers = teacher_controller.get_all_teachers()
 

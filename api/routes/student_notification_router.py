@@ -15,9 +15,14 @@ router = APIRouter(
     response_model=list[dict]
 )
 def get_notifications_for_student(student_id: int, current_user=Depends(require_student)):
+    if student_id != current_user.student_id:
+        raise HTTPException(status_code=403, detail="You can only access your own notifications.")
 
     notifications = (
-        notification_controller.get_student_notifications(student_id)
+        notification_controller.get_student_notifications(
+            student_id,
+            current_user.organization_id,
+        )
     )
 
     return [
@@ -48,7 +53,11 @@ def get_notifications_for_student(student_id: int, current_user=Depends(require_
 def mark_as_read(student_notification_id: int, current_user=Depends(require_student)):
 
     try:
-        result = notification_controller.mark_as_read(student_notification_id)
+        result = notification_controller.mark_as_read(
+            student_notification_id,
+            current_user.student_id,
+            current_user.organization_id,
+        )
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error))
 

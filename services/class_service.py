@@ -14,8 +14,8 @@ class ClassService:
         self.class_repo.add_class(class_group, admin_id)
         return class_group
 
-    def get_class(self, class_id, admin_id=None):
-        class_group = self.class_repo.get_class(class_id, admin_id)
+    def get_class(self, class_id, admin_id=None, organization_id=None):
+        class_group = self.class_repo.get_class(class_id, admin_id, organization_id)
         if class_group is None:
             raise ValueError("Class not found.")
         return class_group

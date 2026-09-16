@@ -2,12 +2,15 @@ class AttendanceRepo:
     def __init__(self, db):
         self.db = db
 
-    def get_students_by_class(self, class_id):
-        self.db.cursor.execute(
-            """SELECT student_id, full_name, email, phone_number, level
-               FROM students WHERE class_id = ? ORDER BY full_name""",
-            (class_id,),
-        )
+    def get_students_by_class(self, class_id, organization_id=None):
+        query = """SELECT student_id, full_name, email, phone_number, level
+               FROM students WHERE class_id = ?"""
+        params = [class_id]
+        if organization_id is not None:
+            query += " AND organization_id = ?"
+            params.append(organization_id)
+        query += " ORDER BY full_name"
+        self.db.cursor.execute(query, params)
         return [
             {
                 "student_id": row[0],
@@ -20,26 +23,42 @@ class AttendanceRepo:
             for row in self.db.cursor.fetchall()
         ]
 
-    def save_attendance(self, class_id, attendance_date, records):
-        self.db.cursor.executemany(
-            """INSERT INTO attendance (student_id, class_id, date, status)
-               VALUES (?, ?, ?, ?)
-               ON CONFLICT(student_id, class_id, date)
-               DO UPDATE SET status = excluded.status""",
-            [
-                (record["student_id"], class_id, attendance_date, record["status"])
-                for record in records
-            ],
-        )
+    def save_attendance(self, class_id, attendance_date, records, organization_id=None):
+        if organization_id is not None:
+            self.db.cursor.executemany(
+                """INSERT INTO attendance (student_id, class_id, date, status, organization_id)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(student_id, class_id, date)
+                   DO UPDATE SET status = excluded.status,
+                                organization_id = excluded.organization_id""",
+                [
+                    (record["student_id"], class_id, attendance_date, record["status"], organization_id)
+                    for record in records
+                ],
+            )
+        else:
+            self.db.cursor.executemany(
+                """INSERT INTO attendance (student_id, class_id, date, status)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(student_id, class_id, date)
+                   DO UPDATE SET status = excluded.status""",
+                [
+                    (record["student_id"], class_id, attendance_date, record["status"])
+                    for record in records
+                ],
+            )
         self.db.connection.commit()
 
-    def get_teacher_history(self, teacher_id, class_id=None, month=None):
+    def get_teacher_history(self, teacher_id, class_id=None, month=None, organization_id=None):
         query = """SELECT a.student_id, s.full_name, a.class_id, a.date, a.status
                    FROM attendance a
                    JOIN students s ON s.student_id = a.student_id
                    JOIN teacher_classes tc ON tc.class_id = a.class_id
                    WHERE tc.teacher_id = ?"""
         params = [teacher_id]
+        if organization_id is not None:
+            query += " AND a.organization_id = ? AND tc.organization_id = ?"
+            params.extend([organization_id, organization_id])
         if class_id is not None:
             query += " AND a.class_id = ?"
             params.append(class_id)
@@ -50,15 +69,18 @@ class AttendanceRepo:
         self.db.cursor.execute(query, params)
         return self._attendance_rows()
 
-    def get_monthly_report(self, class_id, month):
-        self.db.cursor.execute(
-            """SELECT a.student_id, s.full_name, a.class_id, a.date, a.status
+    def get_monthly_report(self, class_id, month, organization_id=None):
+        query = """SELECT a.student_id, s.full_name, a.class_id, a.date, a.status
                FROM attendance a
                JOIN students s ON s.student_id = a.student_id
-               WHERE a.class_id = ? AND a.date LIKE ?
-               ORDER BY a.date, s.full_name""",
-            (class_id, f"{month}%"),
-        )
+               WHERE a.class_id = ?"""
+        params = [class_id]
+        if organization_id is not None:
+            query += " AND a.organization_id = ?"
+            params.append(organization_id)
+        query += " AND a.date LIKE ? ORDER BY a.date, s.full_name"
+        params.append(f"{month}%")
+        self.db.cursor.execute(query, params)
         return self._attendance_rows()
 
     def _attendance_rows(self):

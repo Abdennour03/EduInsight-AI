@@ -5,7 +5,7 @@ from api.schemas.submission_schema import (
     SubmissionResponse
 )
 
-from api.dependencies import submission_controller
+from api.dependencies import get_current_user, submission_controller
 from api.dependencies import require_student
 from fastapi import Depends
 from utils.submission_storage import (
@@ -52,7 +52,8 @@ def create_submission(
         result = submission_controller.create_submission(
             current_user.student_id,
             exercise_id,
-            file_path
+            file_path,
+            current_user.organization_id,
         )
 
         return {
@@ -74,11 +75,11 @@ def create_submission(
     "/",
     response_model=list[SubmissionResponse]
 )
-def get_all_submissions():
+def get_all_submissions(current_user=Depends(get_current_user)):
 
     submissions = (
         submission_controller
-        .get_all_submissions()
+        .get_all_submissions(current_user.organization_id)
     )
 
     return [
@@ -92,7 +93,8 @@ def get_all_submissions():
     response_model=list[SubmissionResponse]
 )
 def get_submissions_by_student(
-    student_id: int
+    student_id: int,
+    current_user=Depends(get_current_user),
 ):
 
     try:
@@ -100,7 +102,8 @@ def get_submissions_by_student(
         submissions = (
             submission_controller
             .search_submission_by_student(
-                student_id
+                student_id,
+                current_user.organization_id,
             )
         )
 
@@ -121,7 +124,8 @@ def get_submissions_by_student(
     response_model=list[SubmissionResponse]
 )
 def get_submissions_by_exercise(
-    exercise_id: int
+    exercise_id: int,
+    current_user=Depends(get_current_user),
 ):
 
     try:
@@ -129,7 +133,8 @@ def get_submissions_by_exercise(
         submissions = (
             submission_controller
             .search_submission_by_exercise(
-                exercise_id
+                exercise_id,
+                current_user.organization_id,
             )
         )
 
@@ -149,12 +154,12 @@ def get_submissions_by_exercise(
     "/count",
     response_model=dict
 )
-def count_submissions():
+def count_submissions(current_user=Depends(get_current_user)):
 
     return {
         "count":
             submission_controller
-            .count_submissions()
+            .count_submissions(current_user.organization_id)
     }
 
 @router.get(
@@ -162,7 +167,8 @@ def count_submissions():
     response_model=SubmissionResponse
 )
 def get_submission(
-    submission_id: int
+    submission_id: int,
+    current_user=Depends(get_current_user),
 ):
 
     try:
@@ -170,7 +176,8 @@ def get_submission(
         submission = (
             submission_controller
             .get_submission(
-                submission_id
+                submission_id,
+                current_user.organization_id,
             )
         )
 
@@ -191,7 +198,8 @@ def get_submission(
 )
 def update_submission(
     submission_id: int,
-    data: SubmissionUpdate
+    data: SubmissionUpdate,
+    current_user=Depends(get_current_user),
 ):
 
     try:
@@ -204,6 +212,7 @@ def update_submission(
             submission_controller
             .update_submission(
                 submission_id,
+                current_user.organization_id,
                 **updates
             )
         )
@@ -224,7 +233,8 @@ def update_submission(
     response_model=dict
 )
 def delete_submission(
-    submission_id: int
+    submission_id: int,
+    current_user=Depends(get_current_user),
 ):
 
     try:
@@ -232,7 +242,8 @@ def delete_submission(
         result = (
             submission_controller
             .delete_submission(
-                submission_id
+                submission_id,
+                current_user.organization_id
             )
         )
 

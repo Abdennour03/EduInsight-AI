@@ -6,7 +6,7 @@ from api.schemas.grade_schema import (
     GradeResponse
 )
 
-from api.dependencies import grade_controller, require_teacher
+from api.dependencies import get_current_user, grade_controller, require_teacher
 from fastapi import Depends
 
 
@@ -39,6 +39,7 @@ def create_grade(data: GradeCreate, current_user=Depends(require_teacher)):
             data.student_id,
             data.exercise_id,
             current_user.teacher_id,
+            current_user.organization_id,
         )
 
         return {
@@ -57,9 +58,9 @@ def create_grade(data: GradeCreate, current_user=Depends(require_teacher)):
     "/",
     response_model=list[GradeResponse]
 )
-def get_all_grades():
+def get_all_grades(current_user=Depends(get_current_user)):
 
-    grades = grade_controller.get_all_grades()
+    grades = grade_controller.get_all_grades(current_user.organization_id)
 
     return [
         grade_to_response(grade)
@@ -71,13 +72,13 @@ def get_all_grades():
     "/student/{student_id}",
     response_model=list[GradeResponse]
 )
-def get_grades_by_student(student_id: int):
+def get_grades_by_student(student_id: int, current_user=Depends(get_current_user)):
 
     try:
 
         grades = (
             grade_controller
-            .search_grade_by_student(student_id)
+            .search_grade_by_student(student_id, current_user.organization_id)
         )
 
         return [
@@ -97,13 +98,13 @@ def get_grades_by_student(student_id: int):
     "/exercise/{exercise_id}",
     response_model=list[GradeResponse]
 )
-def get_grades_by_exercise(exercise_id: int):
+def get_grades_by_exercise(exercise_id: int, current_user=Depends(get_current_user)):
 
     try:
 
         grades = (
             grade_controller
-            .search_grade_by_exercise(exercise_id)
+            .search_grade_by_exercise(exercise_id, current_user.organization_id)
         )
 
         return [
@@ -122,23 +123,21 @@ def get_grades_by_exercise(exercise_id: int):
     "/count",
     response_model=dict
 )
-def count_grades():
+def count_grades(current_user=Depends(get_current_user)):
 
     return {
-        "count": grade_controller.count_grades()
+        "count": grade_controller.count_grades(current_user.organization_id)
     }
 
 @router.get(
     "/{grade_id}",
     response_model=GradeResponse
 )
-def get_grade(grade_id: int):
+def get_grade(grade_id: int, current_user=Depends(get_current_user)):
 
     try:
 
-        grade = grade_controller.get_grade(
-            grade_id
-        )
+        grade = grade_controller.get_grade(grade_id, current_user.organization_id)
 
         return grade_to_response(grade)
 
@@ -172,7 +171,8 @@ def update_grade(
         result = grade_controller.update_grade_by_teacher(
             grade_id,
             current_user.teacher_id,
-            updates["score"]
+            updates["score"],
+            current_user.organization_id,
         )
 
         return {
@@ -196,7 +196,8 @@ def delete_grade(grade_id: int, current_user=Depends(require_teacher)):
 
         result = grade_controller.delete_grade_by_teacher(
             grade_id,
-            current_user.teacher_id
+            current_user.teacher_id,
+            current_user.organization_id,
         )
 
         return {

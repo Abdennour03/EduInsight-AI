@@ -21,7 +21,7 @@ class GradeService:
     # CREATE GRADE
     # =====================================================
 
-    def create_grade(self, score, student_id, exercise_id, teacher_id=None):
+    def create_grade(self, score, student_id, exercise_id, teacher_id=None, organization_id=None):
 
         if not isinstance(student_id, int):
             raise ValueError("Invalid student.")
@@ -29,12 +29,12 @@ class GradeService:
         if not isinstance(exercise_id, int):
             raise ValueError("Invalid exercise.")
 
-        student = self.student_repo.get_student(student_id)
+        student = self.student_repo.get_student(student_id, organization_id=organization_id)
 
         if student is None:
             raise ValueError("Student not found.")
 
-        exercise = self.exercise_repo.get_exercise(exercise_id)
+        exercise = self.exercise_repo.get_exercise(exercise_id, organization_id)
 
         if exercise is None:
             raise ValueError("Exercise not found.")
@@ -43,6 +43,7 @@ class GradeService:
             submission = self.submission_repo.get_submission_by_student_and_exercise(
                 student_id,
                 exercise_id,
+                organization_id,
             )
             if submission is None:
                 raise ValueError(
@@ -57,7 +58,8 @@ class GradeService:
 
         existing_grade = self.grade_repo.get_grade_by_student_and_exercise(
             student_id,
-            exercise_id
+            exercise_id,
+            organization_id,
         )
 
         if existing_grade is not None:
@@ -69,7 +71,8 @@ class GradeService:
             None,
             score,
             student,
-            exercise
+            exercise,
+            organization_id or student.organization_id,
         )
 
         self.grade_repo.add_grade(grade)
@@ -80,12 +83,12 @@ class GradeService:
     # GET GRADE
     # =====================================================
 
-    def get_grade(self, grade_id):
+    def get_grade(self, grade_id, organization_id=None):
 
         if not isinstance(grade_id, int):
             raise ValueError("Grade ID must be an int.")
 
-        grade = self.grade_repo.get_grade(grade_id)
+        grade = self.grade_repo.get_grade(grade_id, organization_id)
 
         if grade is None:
             raise ValueError("Grade not found.")
@@ -96,17 +99,17 @@ class GradeService:
     # GET ALL GRADES
     # =====================================================
 
-    def get_all_grades(self):
+    def get_all_grades(self, organization_id=None):
 
-        return self.grade_repo.get_all_grades()
+        return self.grade_repo.get_all_grades(organization_id)
 
     # =====================================================
     # UPDATE GRADE
     # =====================================================
 
-    def update_grade(self, grade_id, **kwargs):
+    def update_grade(self, grade_id, organization_id=None, **kwargs):
 
-        grade = self.grade_repo.get_grade(grade_id)
+        grade = self.grade_repo.get_grade(grade_id, organization_id)
 
         if grade is None:
             raise ValueError("Grade not found.")
@@ -116,6 +119,7 @@ class GradeService:
 
         self.grade_repo.update_grade(
             grade_id,
+            organization_id,
             **kwargs
         )
 
@@ -125,37 +129,38 @@ class GradeService:
     # DELETE GRADE
     # =====================================================
 
-    def delete_grade(self, grade_id):
+    def delete_grade(self, grade_id, organization_id=None):
 
-        grade = self.grade_repo.get_grade(grade_id)
+        grade = self.grade_repo.get_grade(grade_id, organization_id)
 
         if grade is None:
             raise ValueError("Grade not found.")
 
-        self.grade_repo.delete_grade(grade_id)
+        self.grade_repo.delete_grade(grade_id, organization_id)
 
         return "Grade deleted successfully."
 
-    def delete_grade_by_teacher(self, grade_id, teacher_id):
-        grade = self.grade_repo.get_grade(grade_id)
+    def delete_grade_by_teacher(self, grade_id, teacher_id, organization_id=None):
+        grade = self.grade_repo.get_grade(grade_id, organization_id)
         if grade is None:
             raise ValueError("Grade not found.")
         if grade.exercise.course.teacher.teacher_id != teacher_id:
             raise ValueError("You can only manage grades for your own exercises.")
-        self.grade_repo.delete_grade(grade_id)
+        self.grade_repo.delete_grade(grade_id, organization_id)
         return "Grade deleted successfully."
 
     # =====================================================
     # SEARCH BY STUDENT
     # =====================================================
 
-    def search_grade_by_student(self, student_id):
+    def search_grade_by_student(self, student_id, organization_id=None):
 
         if not isinstance(student_id, int):
             raise ValueError("Student ID must be int.")
 
         grades = self.grade_repo.search_grade_by_student(
-            student_id
+            student_id,
+            organization_id,
         )
 
         if not grades:
@@ -167,13 +172,14 @@ class GradeService:
     # SEARCH BY EXERCISE
     # =====================================================
 
-    def search_grade_by_exercise(self, exercise_id):
+    def search_grade_by_exercise(self, exercise_id, organization_id=None):
 
         if not isinstance(exercise_id, int):
             raise ValueError("Exercise ID must be int.")
 
         grades = self.grade_repo.search_grade_by_exercises(
-            exercise_id
+            exercise_id,
+            organization_id,
         )
 
         if not grades:
@@ -185,40 +191,41 @@ class GradeService:
     # COUNT
     # =====================================================
 
-    def count_grades(self):
+    def count_grades(self, organization_id=None):
 
-        return self.grade_repo.count_grades()
+        return self.grade_repo.count_grades(organization_id)
 
     # =====================================================
     # GET GRADES BY STUDENT
     # =====================================================
 
-    def get_grades_by_student(self, student_id):
+    def get_grades_by_student(self, student_id, organization_id=None):
 
         if not isinstance(student_id, int):
             raise ValueError("Student ID must be int.")
 
-        student = self.student_repo.get_student(student_id)
+        student = self.student_repo.get_student(student_id, organization_id=organization_id)
 
         if student is None:
             raise ValueError("Student not found.")
 
         return self.grade_repo.search_grade_by_student(
-            student_id
+            student_id,
+            organization_id,
         )
 
     # =====================================================
     # GET GRADES BY TEACHER
     # =====================================================
 
-    def get_grades_by_teacher(self, teacher_id):
+    def get_grades_by_teacher(self, teacher_id, organization_id=None):
 
         if not isinstance(teacher_id, int):
             raise ValueError("Teacher ID must be int.")
 
         return [
             grade
-            for grade in self.grade_repo.get_all_grades()
+            for grade in self.grade_repo.get_all_grades(organization_id)
             if grade.exercise.course.teacher.teacher_id == teacher_id
         ]
 
@@ -230,7 +237,8 @@ class GradeService:
         self,
         grade_id,
         teacher_id,
-        score
+        score,
+        organization_id=None
     ):
 
         if not isinstance(grade_id, int):
@@ -244,14 +252,15 @@ class GradeService:
             )
 
         # Get grade
-        grade = self.grade_repo.get_grade(grade_id)
+        grade = self.grade_repo.get_grade(grade_id, organization_id)
 
         if grade is None:
             raise ValueError("Grade not found.")
 
         # Get exercise
         exercise = self.exercise_repo.get_exercise(
-            grade.exercise.exercise_id
+            grade.exercise.exercise_id,
+            organization_id
         )
 
         if exercise is None:
@@ -261,7 +270,8 @@ class GradeService:
 
         # Get course
         course = self.course_repo.get_course(
-            exercise.course.course_id
+            exercise.course.course_id,
+            organization_id
         )
 
         if course is None:
@@ -276,6 +286,7 @@ class GradeService:
         # Update score
         self.grade_repo.update_grade(
             grade_id,
+            organization_id,
             score=score
         )
 

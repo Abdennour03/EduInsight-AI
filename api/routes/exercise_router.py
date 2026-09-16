@@ -6,7 +6,7 @@ from api.schemas.exercise_schema import (
     ExerciseUpdate
 )
 
-from api.dependencies import exercise_controller, require_teacher
+from api.dependencies import exercise_controller, get_current_user, require_teacher
 from fastapi import Depends
 
 
@@ -17,9 +17,9 @@ router = APIRouter(
 
 
 @router.get("/", response_model=list[ExerciseResponse])
-def get_all_exercises():
+def get_all_exercises(current_user=Depends(get_current_user)):
 
-    exercises = exercise_controller.get_all_exercises()
+    exercises = exercise_controller.get_all_exercises(current_user.organization_id)
 
     return [
         {
@@ -33,10 +33,10 @@ def get_all_exercises():
 
 
 @router.get("/{exercise_id}", response_model=ExerciseResponse)
-def get_exercise(exercise_id: int):
+def get_exercise(exercise_id: int, current_user=Depends(get_current_user)):
 
     try:
-        exercise = exercise_controller.get_exercise(exercise_id)
+        exercise = exercise_controller.get_exercise(exercise_id, current_user.organization_id)
 
         return {
             "exercise_id": exercise.exercise_id,
@@ -129,11 +129,11 @@ def delete_exercise(exercise_id: int, current_user=Depends(require_teacher)):
 
 
 @router.get("/search")
-def search_exercises(query: str):
+def search_exercises(query: str, current_user=Depends(get_current_user)):
 
     try:
 
-        exercises = exercise_controller.search_exercise(query)
+        exercises = exercise_controller.search_exercise(query, current_user.organization_id)
 
         return [
             {
@@ -154,8 +154,8 @@ def search_exercises(query: str):
 
 
 @router.get("/count")
-def count_exercises():
+def count_exercises(current_user=Depends(get_current_user)):
 
     return {
-        "count": exercise_controller.count_exercise()
+        "count": exercise_controller.count_exercise(current_user.organization_id)
     }

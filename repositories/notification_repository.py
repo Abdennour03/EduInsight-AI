@@ -10,17 +10,22 @@ class NotificationRepo:
 
 
     def add_notification(self, notification):
+        organization_id = getattr(notification, "organization_id", None)
+        if organization_id is None:
+            sender = notification.sender or notification.admin_sender
+            organization_id = getattr(sender, "organization_id", None)
 
         self.db.cursor.execute("""
             INSERT INTO notifications
-            (title, message, sender_id, admin_id, sender_type, created_at)
-            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            (title, message, sender_id, admin_id, sender_type, created_at, organization_id)
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
         """, (
             notification.title,
             notification.message,
             notification.sender.teacher_id if notification.sender else notification.admin_sender.id,
             notification.admin_sender.admin_id if notification.admin_sender else None,
             "admin" if notification.admin_sender else "teacher",
+            organization_id,
         ))
 
         self.db.connection.commit()
@@ -28,7 +33,7 @@ class NotificationRepo:
         notification.notification_id = self.db.cursor.lastrowid
 
 
-    def get_notification(self, notification_id):
+    def get_notification(self, notification_id, organization_id=None):
 
         self.db.cursor.execute("""
             SELECT
@@ -43,7 +48,8 @@ class NotificationRepo:
                 teachers.email,
                 teachers.password,
                 teachers.phone_number,
-                admins.full_name
+                admins.full_name,
+                notifications.organization_id
             FROM notifications
 
             JOIN teachers
@@ -51,8 +57,8 @@ class NotificationRepo:
             LEFT JOIN admins
                 ON notifications.admin_id = admins.id
 
-            WHERE notifications.notification_id = ?
-        """, (notification_id,))
+            WHERE notifications.notification_id = ?""" + (" AND notifications.organization_id = ?" if organization_id is not None else ""),
+            (notification_id, organization_id) if organization_id is not None else (notification_id,))
 
         row = self.db.cursor.fetchone()
 
@@ -69,10 +75,11 @@ class NotificationRepo:
             None,
             row[4],
             admin_sender=admin,
+            organization_id=row[12],
         )
 
 
-    def get_all_notifications(self):
+    def get_all_notifications(self, organization_id=None):
 
         self.db.cursor.execute("""
             SELECT
@@ -87,14 +94,16 @@ class NotificationRepo:
                 teachers.email,
                 teachers.password,
                 teachers.phone_number,
-                admins.full_name
+                admins.full_name,
+                notifications.organization_id
             FROM notifications
 
             JOIN teachers
                 ON notifications.sender_id = teachers.teacher_id
             LEFT JOIN admins
                 ON notifications.admin_id = admins.id
-        """)
+        """ + (" WHERE notifications.organization_id = ?" if organization_id is not None else ""),
+            (organization_id,) if organization_id is not None else ())
 
         rows = self.db.cursor.fetchall()
 
@@ -113,6 +122,7 @@ class NotificationRepo:
                                 None,
                                 row[4],
                                 admin_sender=admin,
+                                organization_id=row[12],
                             )
 
             notifications.append(notification)
@@ -152,54 +162,22 @@ class NotificationRepo:
         return notifications
 
 
-    def update_notification(self, notification_id, **kwargs):
-
-        if "title" in kwargs:
-
-            self.db.cursor.execute("""
-                UPDATE notifications
-                SET title = ?
-                WHERE notification_id = ?
-            """, (
-                kwargs["title"],
-                notification_id
-            ))
-
-
-        if "message" in kwargs:
-
-            self.db.cursor.execute("""
-                UPDATE notifications
-                SET message = ?
-                WHERE notification_id = ?
-            """, (
-                kwargs["message"],
-                notification_id
-            ))
-
-
-        if "sender" in kwargs:
-
-            self.db.cursor.execute("""
-                UPDATE notifications
-                SET sender_id = ?
-                WHERE notification_id = ?
-            """, (
-                kwargs["sender"].teacher_id,
-                notification_id
-            ))
-
-
-        if "created_at" in kwargs:
-
-            self.db.cursor.execute("""
-                UPDATE notifications
-                SET created_at = ?
-                WHERE notification_id = ?
-            """, (
-                kwargs["created_at"],
-                notification_id
-            ))
+    def update_notification(self, notification_id, organization_id=None, **kwargs):
+        fields = {
+            "title": kwargs.get("title"),
+            "message": kwargs.get("message"),
+            "sender_id": kwargs["sender"].teacher_id if "sender" in kwargs else None,
+            "created_at": kwargs.get("created_at"),
+        }
+        for field, value in fields.items():
+            if value is None:
+                continue
+            sql = f"UPDATE notifications SET {field} = ? WHERE notification_id = ?"
+            values = [value, notification_id]
+            if organization_id is not None:
+                sql += " AND organization_id = ?"
+                values.append(organization_id)
+            self.db.cursor.execute(sql, values)
 
 
         self.db.connection.commit()
@@ -207,17 +185,17 @@ class NotificationRepo:
         return True
 
 
-    def delete_notification(self, notification_id):
+    def delete_notification(self, notification_id, organization_id=None):
 
-        notification = self.get_notification(notification_id)
+        notification = self.get_notification(notification_id, organization_id)
 
         if notification is None:
             return False
 
         self.db.cursor.execute("""
             DELETE FROM notifications
-            WHERE notification_id = ?
-        """, (notification_id,))
+            WHERE notification_id = ?""" + (" AND organization_id = ?" if organization_id is not None else ""),
+            (notification_id, organization_id) if organization_id is not None else (notification_id,))
 
         self.db.connection.commit()
 
@@ -277,12 +255,11 @@ class NotificationRepo:
         return notifications
 
 
-    def count_notifications(self):
-
-        self.db.cursor.execute("""
-            SELECT COUNT(*)
-            FROM notifications
-        """)
+    def count_notifications(self, organization_id=None):
+        self.db.cursor.execute(
+            "SELECT COUNT(*) FROM notifications" + (" WHERE organization_id = ?" if organization_id is not None else ""),
+            (organization_id,) if organization_id is not None else (),
+        )
 
         result = self.db.cursor.fetchone()
 

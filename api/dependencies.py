@@ -98,16 +98,19 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
             user = student_service.get_student(user_id)
             if token_org_id is not None and getattr(user, "organization_id", None) is not None and user.organization_id != token_org_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization mismatch")
+            user._token_role = role
             return user
         if role == "teacher":
             user = teacher_service.get_teacher(user_id)
             if token_org_id is not None and getattr(user, "organization_id", None) is not None and user.organization_id != token_org_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization mismatch")
+            user._token_role = role
             return user
         if role == "admin":
             user = admin_service.get_admin(user_id)
             if token_org_id is not None and getattr(user, "organization_id", None) is not None and user.organization_id != token_org_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization mismatch")
+            user._token_role = role
             return user
     except ValueError:
         pass
@@ -115,19 +118,19 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 
 
 def require_student(current_user=Depends(get_current_user)):
-    if not hasattr(current_user, "student_id"):
+    if getattr(current_user, "_token_role", None) != "student":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student access required")
     return current_user
 
 
 def require_teacher(current_user=Depends(get_current_user)):
-    if not hasattr(current_user, "teacher_id"):
+    if getattr(current_user, "_token_role", None) != "teacher":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Teacher access required")
     return current_user
 
 
 def get_current_admin(current_user=Depends(get_current_user)):
-    if not hasattr(current_user, "admin_id"):
+    if getattr(current_user, "_token_role", None) != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return current_user
 

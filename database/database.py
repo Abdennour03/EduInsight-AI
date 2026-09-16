@@ -240,6 +240,35 @@ class Database:
             );
             """
         )
+        notification_schema = self.cursor.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'notifications'"
+        ).fetchone()
+        if notification_schema and "REFERENCES admins(admin_id)" in notification_schema[0]:
+            self.connection.execute("PRAGMA foreign_keys = OFF")
+            self.cursor.execute(
+                """CREATE TABLE notifications_migrated (
+                    notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    sender_id INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    admin_id INTEGER REFERENCES admins(id),
+                    sender_type TEXT NOT NULL DEFAULT 'teacher',
+                    organization_id INTEGER REFERENCES organizations(id),
+                    FOREIGN KEY (sender_id) REFERENCES teachers(teacher_id)
+                )"""
+            )
+            self.cursor.execute(
+                """INSERT INTO notifications_migrated
+                   (notification_id, title, message, sender_id, created_at, admin_id, sender_type)
+                   SELECT notification_id, title, message, sender_id, created_at,
+                          admin_id, COALESCE(sender_type, 'teacher')
+                   FROM notifications"""
+            )
+            self.cursor.execute("DROP TABLE notifications")
+            self.cursor.execute("ALTER TABLE notifications_migrated RENAME TO notifications")
+            self.connection.commit()
+            self.connection.execute("PRAGMA foreign_keys = ON")
         exercise_columns = {
             row[1]
             for row in self.cursor.execute("PRAGMA table_info(exercises)")

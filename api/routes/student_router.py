@@ -5,7 +5,7 @@ from api.schemas.student_schema import (
     StudentUpdate
 )
 from api.schemas.student_exercise_schema import StudentExerciseResponse
-from api.dependencies import student_controller
+from api.dependencies import get_current_admin, student_controller
 from fastapi import APIRouter , HTTPException
 
 router = APIRouter(
@@ -56,7 +56,10 @@ def get_my_courses(
             return []
         class_id = row[0]
 
-    courses = course_controller.get_courses_by_class_id(class_id)
+    courses = course_controller.get_courses_by_class_id(
+        class_id,
+        current_user.organization_id,
+    )
 
     return [
         {
@@ -84,7 +87,8 @@ def get_my_exercises(
     # Let the service handle class_id being None – it will fall back to the student's level.
     exercises = student_controller.get_my_exercises(
         current_user.student_id,
-        current_user.class_id
+        current_user.class_id,
+        current_user.organization_id,
     )
 
     return [
@@ -115,7 +119,8 @@ def get_my_submissions(
 ):
 
     submissions = submission_controller.get_submissions_by_student(
-        current_user.student_id
+        current_user.student_id,
+        current_user.organization_id,
     )
 
     return [
@@ -162,7 +167,8 @@ def create_my_submission(
         submission = submission_controller.create_submission(
             current_user.student_id,
             exercise_id,
-            file_path
+            file_path,
+            current_user.organization_id,
         )
     except ValueError:
         delete_submission_file(file_path)
@@ -184,7 +190,7 @@ def replace_my_submission(
     file: UploadFile = File(...),
     current_user=Depends(require_student),
 ):
-    submission = submission_controller.get_submission(submission_id)
+    submission = submission_controller.get_submission(submission_id, current_user.organization_id)
     if submission.student_id != current_user.student_id:
         raise HTTPException(status_code=403, detail="You can only edit your own submissions.")
 
@@ -194,13 +200,17 @@ def replace_my_submission(
         current_user.student_id,
     )
     try:
-        submission_controller.update_submission(submission_id, file_path=new_file_path)
+        submission_controller.update_submission(
+            submission_id,
+            current_user.organization_id,
+            file_path=new_file_path,
+        )
         delete_submission_file(submission.file_path)
     except ValueError:
         delete_submission_file(new_file_path)
         raise
 
-    updated = submission_controller.get_submission(submission_id)
+    updated = submission_controller.get_submission(submission_id, current_user.organization_id)
     return {
         "submission_id": updated.submission_id,
         "student_id": updated.student_id,
@@ -216,11 +226,11 @@ def delete_my_submission(
     submission_id: int,
     current_user=Depends(require_student),
 ):
-    submission = submission_controller.get_submission(submission_id)
+    submission = submission_controller.get_submission(submission_id, current_user.organization_id)
     if submission.student_id != current_user.student_id:
         raise HTTPException(status_code=403, detail="You can only delete your own submissions.")
 
-    submission_controller.delete_submission(submission_id)
+    submission_controller.delete_submission(submission_id, current_user.organization_id)
     delete_submission_file(submission.file_path)
     return {"message": "Submission deleted successfully."}
 
@@ -235,7 +245,8 @@ def get_my_grades(
 ):
 
     grades = grade_controller.get_grades_by_student(
-        current_user.student_id
+        current_user.student_id,
+        current_user.organization_id,
     )
 
     return [
@@ -296,7 +307,7 @@ def update_my_profile(
     return student_controller.update_my_profile(current_user, updates)
 
 @router.get("/", response_model=list[StudentResponse])
-def get_all_student():
+def get_all_student(_admin=Depends(get_current_admin)):
     students = student_controller.get_all_students()
     return [{
         "student_id": student.student_id,

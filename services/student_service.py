@@ -47,7 +47,7 @@ class StudentService:
             raise ValueError("Class IDs must be integers.")
         return self.student_repo.get_students_by_class_ids(class_ids)
 
-    def get_my_exercises(self, student_id, class_id):
+    def get_my_exercises(self, student_id, class_id, organization_id=None):
         if not isinstance(student_id, int):
             raise ValueError("Student ID must be an integer.")
         # If class_id is None (new student without class assignment),
@@ -61,18 +61,18 @@ class StudentService:
             else:
                 # No class_id – use the level string to fetch exercises.
                 return self.exercise_repo.get_exercises_by_level_for_student(
-                    student.level, student_id
+                    student.level, student_id, organization_id
                 )
         # Existing behavior: if class_id is a string (treated as level)
         if isinstance(class_id, str):
             return self.exercise_repo.get_exercises_by_level_for_student(
-                class_id, student_id
+                class_id, student_id, organization_id
             )
         # At this point class_id should be an integer.
         if not isinstance(class_id, int):
             raise ValueError("Class ID must be an integer.")
         return self.exercise_repo.get_exercises_by_class_id_for_student(
-            class_id, student_id
+            class_id, student_id, organization_id
         )
 
     def assign_to_class(self, student_id, class_id):
