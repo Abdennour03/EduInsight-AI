@@ -61,6 +61,7 @@ def class_response(class_group):
         "class_id": class_group.class_id,
         "name": class_group.name,
         "academic_year": class_group.academic_year,
+        "organization_id": class_group.organization_id,
     }
 
 
