@@ -6,7 +6,7 @@ class TeacherService:
     def __init__(self, teacher_repo):
         self.teacher_repo = teacher_repo
         
-    def create_teacher(self, full_name, email, password, phone_number):
+    def create_teacher(self, full_name, email, password, phone_number, admin_id=None):
         validation = TeacherValidator()
         validation.validate_name(full_name)
         validation.validate_email(email)
@@ -14,23 +14,21 @@ class TeacherService:
         validation.validate_phone_number(phone_number)
         hashed_password = hash_password(password)
         teacher = Teacher(None, full_name, email, hashed_password, phone_number)
-        self.teacher_repo.add_teacher(teacher)
+        self.teacher_repo.add_teacher(teacher, admin_id)
         return teacher
         
 
-    def get_teacher(self, teacher_id):
+    def get_teacher(self, teacher_id, admin_id=None):
         if not isinstance(teacher_id, int):
             raise ValueError("Teacher Id must be an integer.")
-        teacher = self.teacher_repo.get_teacher(teacher_id)
+        teacher = self.teacher_repo.get_teacher(teacher_id, admin_id)
         if teacher is None:
             raise ValueError("Teacher not found.")
         return teacher
 
 
-    def get_all_teachers(self):
-        teachers = self.teacher_repo.get_all_teachers()
-        if not teachers:
-            raise ValueError("No teachers found.")
+    def get_all_teachers(self, admin_id=None):
+        teachers = self.teacher_repo.get_all_teachers(admin_id)
         return teachers
 
     def assign_to_classes(self, teacher_id, class_ids):
@@ -85,12 +83,10 @@ class TeacherService:
         self.teacher_repo.delete_teacher(teacher_id)
         return "teacher deleted successfully."
         
-    def search_teacher(self, full_name):
+    def search_teacher(self, full_name, admin_id=None):
         TeacherValidator.validate_name(full_name)
-        teachers = self.teacher_repo.search_teacher(full_name)
-        if not teachers:
-            raise ValueError("No teachers found.")
+        teachers = self.teacher_repo.search_teacher(full_name, admin_id)
         return teachers
     
-    def count_teachers(self):
-        return self.teacher_repo.count_teacher()
+    def count_teachers(self, admin_id=None):
+        return self.teacher_repo.count_teacher(admin_id)

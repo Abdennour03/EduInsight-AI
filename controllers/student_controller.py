@@ -5,8 +5,8 @@ class StudentController:
     def create_student(self, full_name, email, password, phone_number, level, class_id=None):
         return self.student_service.create_student(full_name, email, password, phone_number, level, class_id)
 
-    def get_student(self, student_id):
-        return self.student_service.get_student(student_id)
+    def get_student(self, student_id, admin_id=None):
+        return self.student_service.get_student(student_id, admin_id)
 
     def get_all_students(self):
         return self.student_service.get_all_students()
@@ -26,11 +26,11 @@ class StudentController:
     def delete_student(self, student_id):
         return self.student_service.delete_student(student_id)
     
-    def search_student(self, full_name):
-        return self.student_service.search_student(full_name)
+    def search_student(self, full_name, admin_id=None):
+        return self.student_service.search_student(full_name, admin_id)
 
-    def count_students(self):
-        return self.student_service.count_students()
+    def count_students(self, admin_id=None):
+        return self.student_service.count_students(admin_id)
 
     def get_my_profile(self, current_user):
         return self.student_service.get_my_profile(current_user)

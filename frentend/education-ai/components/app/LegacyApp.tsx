@@ -2345,7 +2345,7 @@ function AdminWorkspace({
                 </div>
               ))
             ) : (
-              <p className="py-5 text-sm text-[#64748B]">No students found.</p>
+              <div className="flex flex-wrap items-center justify-between gap-3 py-5"><p className="text-sm text-[#64748B]">No students found.</p><button type="button" onClick={() => { setTab("Students"); setFormOpen(true); setError(""); }} className="rounded-lg bg-[#EAB308] px-3 py-2 text-xs font-bold text-[#422006]">Add first student</button></div>
             ))}
           {tab === "Teachers" &&
             (filteredTeachers.length ? (
@@ -2389,7 +2389,7 @@ function AdminWorkspace({
                 </div>
               ))
             ) : (
-              <p className="py-5 text-sm text-[#64748B]">No teachers found.</p>
+              <div className="flex flex-wrap items-center justify-between gap-3 py-5"><p className="text-sm text-[#64748B]">No teachers found.</p><button type="button" onClick={() => { setTab("Teachers"); setFormOpen(true); setError(""); }} className="rounded-lg bg-[#EAB308] px-3 py-2 text-xs font-bold text-[#422006]">Add first teacher</button></div>
             ))}
           {tab === "Classes" &&
             (filteredClasses.length ? (
@@ -2416,7 +2416,7 @@ function AdminWorkspace({
                 </div>
               ))
             ) : (
-              <p className="py-5 text-sm text-[#64748B]">No classes found.</p>
+              <div className="flex flex-wrap items-center justify-between gap-3 py-5"><p className="text-sm text-[#64748B]">No classes created yet.</p><button type="button" onClick={() => { setTab("Classes"); setFormOpen(true); setError(""); }} className="rounded-lg bg-[#EAB308] px-3 py-2 text-xs font-bold text-[#422006]">Create first class</button></div>
             ))}
         </div>
       </div>

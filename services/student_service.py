@@ -7,7 +7,7 @@ class StudentService:
         self.student_repo = student_repo
         self.exercise_repo = exercise_repo
 
-    def create_student(self, full_name, email, password, phone_number, level, class_id=None):
+    def create_student(self, full_name, email, password, phone_number, level, class_id=None, admin_id=None):
         validation = StudentValidator()
         validation.validate_name(full_name)
         validation.validate_email(email)
@@ -16,21 +16,19 @@ class StudentService:
         validation.validate_level(level)
         hashed_password = hash_password(password)
         student = Student(None, full_name, email, hashed_password, phone_number, level, class_id)
-        self.student_repo.add_student(student)
+        self.student_repo.add_student(student, admin_id)
         return student
 
-    def get_student(self, student_id):
+    def get_student(self, student_id, admin_id=None):
         if not isinstance(student_id, int):
             raise ValueError("student Id must be an integer.")
-        student = self.student_repo.get_student(student_id)
+        student = self.student_repo.get_student(student_id, admin_id)
         if student is None:
             raise ValueError("student not found.")
         return student
 
-    def get_all_students(self):
-        students = self.student_repo.get_all_student()
-        if not students:
-            raise ValueError("No students found.")
+    def get_all_students(self, admin_id=None):
+        students = self.student_repo.get_all_student(admin_id)
         for student in students:
             student.class_ids = self.student_repo.get_student_class_ids(student.student_id)
         return students
@@ -116,15 +114,13 @@ class StudentService:
         self.student_repo.delete_student(student_id)
         return "Student deleted successfully."
 
-    def search_student(self, full_name):
+    def search_student(self, full_name, admin_id=None):
         StudentValidator.validate_name(full_name)
-        students = self.student_repo.search_student(full_name)
-        if not students:
-            raise ValueError("No students found.")
+        students = self.student_repo.search_student(full_name, admin_id)
         return students
 
-    def count_students(self):
-        return self.student_repo.count_students()
+    def count_students(self, admin_id=None):
+        return self.student_repo.count_students(admin_id)
 
     # Profile methods
     def get_my_profile(self, current_user):

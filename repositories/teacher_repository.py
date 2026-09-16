@@ -21,29 +21,29 @@ class TeacherRepo:
         teacher.classes = self._classes_for_teacher(teacher.teacher_id)
         return teacher
 
-    def add_teacher(self, teacher):
+    def add_teacher(self, teacher, admin_id=None):
         self.db.cursor.execute(
-            """INSERT INTO teachers (full_name, email, password, phone_number)
-               VALUES (?, ?, ?, ?)""",
-            (teacher.full_name, teacher.email, teacher.password, teacher.phone_number),
+                """INSERT INTO teachers (full_name, email, password, phone_number, admin_id)
+                    VALUES (?, ?, ?, ?, ?)""",
+                (teacher.full_name, teacher.email, teacher.password, teacher.phone_number, admin_id),
         )
         self.db.connection.commit()
         teacher.teacher_id = self.db.cursor.lastrowid
         teacher.classes = []
 
-    def get_teacher(self, teacher_id):
+    def get_teacher(self, teacher_id, admin_id=None):
         self.db.cursor.execute(
-            """SELECT teacher_id, full_name, email, password, phone_number
-               FROM teachers WHERE teacher_id = ?""",
-            (teacher_id,),
+                """SELECT teacher_id, full_name, email, password, phone_number
+                    FROM teachers WHERE teacher_id = ?""" + (" AND admin_id = ?" if admin_id is not None else ""),
+                (teacher_id, admin_id) if admin_id is not None else (teacher_id,),
         )
         row = self.db.cursor.fetchone()
         return self._teacher_from_row(row) if row else None
 
-    def get_all_teachers(self):
+    def get_all_teachers(self, admin_id=None):
         self.db.cursor.execute(
             """SELECT teacher_id, full_name, email, password, phone_number
-               FROM teachers ORDER BY full_name"""
+               FROM teachers WHERE (? IS NULL OR admin_id = ?) ORDER BY full_name""", (admin_id, admin_id)
         )
         return [self._teacher_from_row(row) for row in self.db.cursor.fetchall()]
 
@@ -83,16 +83,22 @@ class TeacherRepo:
         self.db.connection.commit()
         return True
 
-    def search_teacher(self, full_name):
+    def belongs_to_admin(self, teacher_id, admin_id):
+        return self.db.cursor.execute(
+            "SELECT 1 FROM teachers WHERE teacher_id = ? AND admin_id = ?",
+            (teacher_id, admin_id),
+        ).fetchone() is not None
+
+    def search_teacher(self, full_name, admin_id=None):
         self.db.cursor.execute(
-            """SELECT teacher_id, full_name, email, password, phone_number
-               FROM teachers WHERE full_name LIKE ? ORDER BY full_name""",
-            (f"%{full_name}%",),
+                """SELECT teacher_id, full_name, email, password, phone_number
+                    FROM teachers WHERE full_name LIKE ?""" + (" AND admin_id = ?" if admin_id is not None else "") + " ORDER BY full_name",
+                (f"%{full_name}%", admin_id) if admin_id is not None else (f"%{full_name}%",),
         )
         return [self._teacher_from_row(row) for row in self.db.cursor.fetchall()]
 
-    def count_teacher(self):
-        self.db.cursor.execute("SELECT COUNT(*) FROM teachers")
+    def count_teacher(self, admin_id=None):
+        self.db.cursor.execute("SELECT COUNT(*) FROM teachers" + (" WHERE admin_id = ?" if admin_id is not None else ""), (admin_id,) if admin_id is not None else ())
         return self.db.cursor.fetchone()[0]
 
     def get_teacher_by_email(self, email):

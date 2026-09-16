@@ -119,10 +119,12 @@ def update_my_profile(data: AdminProfileUpdate, admin=Depends(get_current_admin)
 def create_class(data: ClassCreate, _admin=Depends(get_current_admin)):
     try:
         selected_teachers = [
-            teacher_controller.get_teacher(teacher_id)
+            teacher_controller.get_teacher(teacher_id, _admin.admin_id)
             for teacher_id in data.teacher_ids
         ]
-        created_class = class_controller.create_class(data.name, data.academic_year)
+        for teacher in selected_teachers:
+            admin_controller.assert_teacher_access(teacher.teacher_id, _admin.admin_id)
+        created_class = admin_controller.create_class(data, _admin.admin_id)
         for teacher in selected_teachers:
             existing_class_ids = [
                 class_group.class_id for class_group in teacher.classes
@@ -132,6 +134,7 @@ def create_class(data: ClassCreate, _admin=Depends(get_current_admin)):
             admin_controller.assign_teacher_to_classes(
                 teacher.teacher_id,
                 existing_class_ids,
+                _admin.admin_id,
             )
         return class_response(created_class)
     except ValueError as error:
@@ -140,14 +143,24 @@ def create_class(data: ClassCreate, _admin=Depends(get_current_admin)):
 
 @router.get("/classes", response_model=list[ClassResponse])
 def list_classes(_admin=Depends(get_current_admin)):
-    return [class_response(item) for item in class_controller.get_all_classes()]
+    return [class_response(item) for item in admin_controller.get_classes(_admin.admin_id)]
+
+
+@router.get("/stats")
+def workspace_stats(_admin=Depends(get_current_admin)):
+    return {
+        "total_students": student_controller.count_students(_admin.admin_id),
+        "teaching_staff": teacher_controller.count_teachers(_admin.admin_id),
+        "active_classes": len(admin_controller.get_classes(_admin.admin_id)),
+    }
 
 
 @router.put("/classes/{class_id}")
 def update_class(class_id: int, data: ClassUpdate, _admin=Depends(get_current_admin)):
     try:
-        return {"message": class_controller.update_class(
-            class_id, **data.model_dump(exclude_none=True)
+        admin_controller.assert_class_access(class_id, _admin.admin_id)
+        return {"message": admin_controller.admin_service.class_service.update_class(
+            class_id, _admin.admin_id, **data.model_dump(exclude_none=True)
         )}
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
@@ -156,7 +169,8 @@ def update_class(class_id: int, data: ClassUpdate, _admin=Depends(get_current_ad
 @router.delete("/classes/{class_id}")
 def delete_class(class_id: int, _admin=Depends(get_current_admin)):
     try:
-        return {"message": class_controller.delete_class(class_id)}
+        admin_controller.assert_class_access(class_id, _admin.admin_id)
+        return {"message": admin_controller.admin_service.class_service.delete_class(class_id, _admin.admin_id)}
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error))
 
@@ -164,26 +178,27 @@ def delete_class(class_id: int, _admin=Depends(get_current_admin)):
 @router.post("/students")
 def create_student(data: AdminStudentCreate, _admin=Depends(get_current_admin)):
     try:
-        return student_response(admin_controller.create_student(data))
+        return student_response(admin_controller.create_student(data, _admin.admin_id))
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
 
 
 @router.get("/students")
 def list_students(_admin=Depends(get_current_admin)):
-    return [student_response(item) for item in student_controller.get_all_students()]
+    return [student_response(item) for item in admin_controller.get_students(_admin.admin_id)]
 
 
 @router.get("/students/search")
 def search_students(full_name: str, _admin=Depends(get_current_admin)):
-    return [student_response(item) for item in student_controller.search_student(full_name)]
+    return [student_response(item) for item in student_controller.search_student(full_name, _admin.admin_id)]
 
 
 @router.put("/students/{student_id}")
 def update_student(student_id: int, data: AdminStudentUpdate, _admin=Depends(get_current_admin)):
     try:
+        admin_controller.assert_student_access(student_id, _admin.admin_id)
         return {"message": admin_controller.update_student(
-            student_id, data.model_dump(exclude_none=True)
+            student_id, data.model_dump(exclude_none=True), _admin.admin_id
         )}
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
@@ -192,6 +207,8 @@ def update_student(student_id: int, data: AdminStudentUpdate, _admin=Depends(get
 @router.delete("/students/{student_id}")
 def delete_student(student_id: int, _admin=Depends(get_current_admin)):
     try:
+        admin_controller.assert_student_access(student_id, _admin.admin_id)
+        admin_controller.assert_student_access(student_id, _admin.admin_id)
         return {"message": student_controller.delete_student(student_id)}
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error))
@@ -200,6 +217,7 @@ def delete_student(student_id: int, _admin=Depends(get_current_admin)):
 @router.get("/students/{student_id}/report", response_model=AdminStudentReportResponse)
 def student_report(student_id: int, _admin=Depends(get_current_admin)):
     try:
+        admin_controller.assert_student_access(student_id, _admin.admin_id)
         return admin_controller.get_student_report(student_id)
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error))
@@ -208,7 +226,9 @@ def student_report(student_id: int, _admin=Depends(get_current_admin)):
 @router.post("/students/{student_id}/class/{class_id}")
 def assign_student(student_id: int, class_id: int, _admin=Depends(get_current_admin)):
     try:
-        return {"message": admin_controller.assign_student_to_class(student_id, class_id)}
+        admin_controller.assert_student_access(student_id, _admin.admin_id)
+        admin_controller.assert_class_access(class_id, _admin.admin_id)
+        return {"message": admin_controller.assign_student_to_class(student_id, class_id, _admin.admin_id)}
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
 
@@ -216,26 +236,27 @@ def assign_student(student_id: int, class_id: int, _admin=Depends(get_current_ad
 @router.post("/teachers")
 def create_teacher(data: AdminTeacherCreate, _admin=Depends(get_current_admin)):
     try:
-        return teacher_response(admin_controller.create_teacher(data))
+        return teacher_response(admin_controller.create_teacher(data, _admin.admin_id))
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
 
 
 @router.get("/teachers")
 def list_teachers(_admin=Depends(get_current_admin)):
-    return [teacher_response(item) for item in teacher_controller.get_all_teachers()]
+    return [teacher_response(item) for item in admin_controller.get_teachers(_admin.admin_id)]
 
 
 @router.get("/teachers/search")
 def search_teachers(full_name: str, _admin=Depends(get_current_admin)):
-    return [teacher_response(item) for item in teacher_controller.search_teacher(full_name)]
+    return [teacher_response(item) for item in teacher_controller.search_teacher(full_name, _admin.admin_id)]
 
 
 @router.put("/teachers/{teacher_id}")
 def update_teacher(teacher_id: int, data: AdminTeacherUpdate, _admin=Depends(get_current_admin)):
     try:
+        admin_controller.assert_teacher_access(teacher_id, _admin.admin_id)
         return {"message": admin_controller.update_teacher(
-            teacher_id, data.model_dump(exclude_none=True)
+            teacher_id, data.model_dump(exclude_none=True), _admin.admin_id
         )}
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
@@ -244,6 +265,8 @@ def update_teacher(teacher_id: int, data: AdminTeacherUpdate, _admin=Depends(get
 @router.delete("/teachers/{teacher_id}")
 def delete_teacher(teacher_id: int, _admin=Depends(get_current_admin)):
     try:
+        admin_controller.assert_teacher_access(teacher_id, _admin.admin_id)
+        admin_controller.assert_teacher_access(teacher_id, _admin.admin_id)
         return {"message": teacher_controller.delete_teacher(teacher_id)}
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error))
@@ -252,7 +275,10 @@ def delete_teacher(teacher_id: int, _admin=Depends(get_current_admin)):
 @router.post("/teachers/{teacher_id}/classes")
 def assign_teacher(teacher_id: int, data: TeacherClassAssignment, _admin=Depends(get_current_admin)):
     try:
-        teacher = teacher_controller.get_teacher(teacher_id)
+        admin_controller.assert_teacher_access(teacher_id, _admin.admin_id)
+        for class_id in data.class_ids:
+            admin_controller.assert_class_access(class_id, _admin.admin_id)
+        teacher = teacher_controller.get_teacher(teacher_id, _admin.admin_id)
         existing_class_ids = {
             class_group.class_id for class_group in teacher.classes
         }
@@ -269,6 +295,7 @@ def assign_teacher(teacher_id: int, data: TeacherClassAssignment, _admin=Depends
         return {"message": admin_controller.assign_teacher_to_classes(
             teacher_id,
             all_class_ids,
+            _admin.admin_id,
         )}
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))

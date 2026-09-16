@@ -1,5 +1,5 @@
 class Student:
-    def __init__(self, student_id, full_name, email, password, phone_number, level, class_id=None, class_ids=None):
+    def __init__(self, student_id, full_name, email, password, phone_number, level, class_id=None, class_ids=None, admin_id=None):
         self.student_id = student_id
         self.full_name = full_name
         self.email = email
@@ -8,3 +8,4 @@ class Student:
         self.level = level
         self.class_id = class_id
         self.class_ids = class_ids or ([class_id] if class_id is not None else [])
+        self.admin_id = admin_id

@@ -17,11 +17,6 @@ class AdminService:
         return admin
 
     def setup_admin(self, full_name, email, password):
-        if self.admin_repo.has_admins():
-            raise ValueError(
-                "The administrator account is already initialized. "
-                "Students and teachers must be added by the existing administrator."
-            )
         return self.create_admin(full_name, email, password)
 
     def get_admin(self, admin_id):
@@ -53,11 +48,11 @@ class AdminService:
         self.admin_repo.update_admin(admin_id, **updates)
         return self.get_profile(admin_id)
 
-    def create_student(self, data):
+    def create_student(self, data, admin_id):
         class_ids = data.class_ids or ([data.class_id] if data.class_id is not None else [])
         if not class_ids:
             raise ValueError("Please select at least one valid class.")
-        classes = [self.class_service.get_class(class_id) for class_id in class_ids]
+        classes = [self.class_service.get_class(class_id, admin_id) for class_id in class_ids]
         levels = {class_group.name.strip().split()[0].upper() for class_group in classes}
         if len(levels) > 1:
             raise ValueError(
@@ -66,39 +61,41 @@ class AdminService:
         student = self.student_service.create_student(
             data.full_name, data.email, data.password, data.phone_number, classes[0].name,
             class_id=class_ids[0],
+            admin_id=admin_id,
         )
         self.student_service.set_student_classes(student.student_id, class_ids)
         return student
 
-    def create_teacher(self, data):
+    def create_teacher(self, data, admin_id):
         if data.class_ids is not None:
             for class_id in data.class_ids:
-                self.class_service.get_class(class_id)
+                self.class_service.get_class(class_id, admin_id)
             self.teacher_service.validate_class_assignments(data.class_ids)
         teacher = self.teacher_service.create_teacher(
-            data.full_name, data.email, data.password, data.phone_number
+            data.full_name, data.email, data.password, data.phone_number, admin_id
         )
         if data.class_ids is not None:
-            self.assign_teacher_to_classes(teacher.teacher_id, data.class_ids)
+            self.assign_teacher_to_classes(teacher.teacher_id, data.class_ids, admin_id)
         return teacher
 
-    def update_student(self, student_id, updates):
+    def update_student(self, student_id, updates, admin_id):
+        self.assert_student_access(student_id, admin_id)
         class_ids = updates.pop("class_ids", None) if "class_ids" in updates else None
         class_id = updates.pop("class_id", None) if "class_id" in updates else None
         result = self.student_service.update_student(student_id, **updates)
         if class_ids is not None:
-            self._validate_student_class_levels(class_ids)
+            self._validate_student_class_levels(class_ids, admin_id)
             self.student_service.set_student_classes(student_id, class_ids)
         if class_id is not None:
-            self.assign_student_to_class(student_id, class_id)
+            self.assign_student_to_class(student_id, class_id, admin_id)
         return result
 
-    def _validate_student_class_levels(self, class_ids):
+    def _validate_student_class_levels(self, class_ids, admin_id):
         if not class_ids:
             raise ValueError("Select at least one class.")
         levels = set()
         for class_id in class_ids:
-            class_group = self.class_service.get_class(class_id)
+            class_group = self.class_service.get_class(class_id, admin_id)
             level = class_group.name.strip().split()[0].upper()
             levels.add(level)
         if len(levels) > 1:
@@ -106,23 +103,38 @@ class AdminService:
                 "Impossible to combine classes from different academic levels (e.g., 3AC and 1BAC)."
             )
 
-    def update_teacher(self, teacher_id, updates):
+    def update_teacher(self, teacher_id, updates, admin_id):
+        self.assert_teacher_access(teacher_id, admin_id)
         class_ids = updates.pop("class_ids", None) if "class_ids" in updates else None
         result = self.teacher_service.update_teacher(teacher_id, **updates)
         if class_ids is not None:
-            self.assign_teacher_to_classes(teacher_id, class_ids)
+            self.assign_teacher_to_classes(teacher_id, class_ids, admin_id)
         return result
 
-    def assign_student_to_class(self, student_id, class_id):
-        self.class_service.get_class(class_id)
+    def assign_student_to_class(self, student_id, class_id, admin_id):
+        self.assert_student_access(student_id, admin_id)
+        self.class_service.get_class(class_id, admin_id)
         self.student_service.assign_to_class(student_id, class_id)
         return "Student assigned to class successfully."
 
-    def assign_teacher_to_classes(self, teacher_id, class_ids):
+    def assign_teacher_to_classes(self, teacher_id, class_ids, admin_id):
+        self.assert_teacher_access(teacher_id, admin_id)
         for class_id in class_ids:
-            self.class_service.get_class(class_id)
+            self.class_service.get_class(class_id, admin_id)
         self.teacher_service.assign_to_classes(teacher_id, class_ids)
         return "Teacher assigned to classes successfully."
 
     def get_student_report(self, student_id):
         return self.student_service.get_academic_report(student_id)
+
+    def assert_student_access(self, student_id, admin_id):
+        if not self.student_service.student_repo.belongs_to_admin(student_id, admin_id):
+            raise ValueError("Student not found in your workspace.")
+
+    def assert_teacher_access(self, teacher_id, admin_id):
+        if not self.teacher_service.teacher_repo.belongs_to_admin(teacher_id, admin_id):
+            raise ValueError("Teacher not found in your workspace.")
+
+    def assert_class_access(self, class_id, admin_id):
+        if not self.class_service.class_repo.belongs_to_admin(class_id, admin_id):
+            raise ValueError("Class not found in your workspace.")

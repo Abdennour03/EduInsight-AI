@@ -113,7 +113,8 @@ class Database:
             CREATE TABLE IF NOT EXISTS classes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
-                academic_year TEXT NOT NULL
+                academic_year TEXT NOT NULL,
+                admin_id INTEGER REFERENCES admins(id)
             );
             CREATE TABLE IF NOT EXISTS admins (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -130,6 +131,7 @@ class Database:
                 phone_number TEXT,
                 level TEXT NOT NULL,
                 class_id INTEGER,
+                admin_id INTEGER REFERENCES admins(id),
                 FOREIGN KEY (class_id) REFERENCES classes(id)
             );
             CREATE TABLE IF NOT EXISTS teachers (
@@ -139,6 +141,7 @@ class Database:
                 password TEXT NOT NULL,
                 phone_number TEXT,
                 class_id INTEGER,
+                admin_id INTEGER REFERENCES admins(id),
                 FOREIGN KEY (class_id) REFERENCES classes(id)
             );
             CREATE TABLE IF NOT EXISTS teacher_classes (
@@ -239,6 +242,8 @@ class Database:
         student_columns = {
             row[1] for row in self.cursor.execute("PRAGMA table_info(students)")
         }
+        if "admin_id" not in student_columns:
+            self.cursor.execute("ALTER TABLE students ADD COLUMN admin_id INTEGER REFERENCES admins(id)")
         if "class_id" not in student_columns:
             self.cursor.execute(
                 "ALTER TABLE students ADD COLUMN class_id INTEGER REFERENCES classes(class_id)"
@@ -246,6 +251,8 @@ class Database:
         teacher_columns = {
             row[1] for row in self.cursor.execute("PRAGMA table_info(teachers)")
         }
+        if "admin_id" not in teacher_columns:
+            self.cursor.execute("ALTER TABLE teachers ADD COLUMN admin_id INTEGER REFERENCES admins(id)")
         if "class_id" not in teacher_columns:
             self.cursor.execute(
                 "ALTER TABLE teachers ADD COLUMN class_id INTEGER REFERENCES classes(id)"
@@ -262,6 +269,8 @@ class Database:
         class_columns = {
             row[1] for row in self.cursor.execute("PRAGMA table_info(classes)")
         }
+        if "admin_id" not in class_columns:
+            self.cursor.execute("ALTER TABLE classes ADD COLUMN admin_id INTEGER REFERENCES admins(id)")
         if "id" not in class_columns:
             self.cursor.execute("ALTER TABLE classes ADD COLUMN id INTEGER")
             if "class_id" in class_columns:
@@ -271,6 +280,12 @@ class Database:
         self.cursor.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_classes_canonical_id ON classes(id)"
         )
+        first_admin = self.cursor.execute("SELECT id FROM admins ORDER BY id LIMIT 1").fetchone()
+        if first_admin:
+            admin_id = first_admin[0]
+            self.cursor.execute("UPDATE classes SET admin_id = ? WHERE admin_id IS NULL", (admin_id,))
+            self.cursor.execute("UPDATE teachers SET admin_id = ? WHERE admin_id IS NULL", (admin_id,))
+            self.cursor.execute("UPDATE students SET admin_id = ? WHERE admin_id IS NULL", (admin_id,))
         self.cursor.execute(
             """CREATE TABLE IF NOT EXISTS teacher_classes (
                 teacher_id INTEGER NOT NULL,
