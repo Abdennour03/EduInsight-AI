@@ -4503,13 +4503,13 @@ export function ConnectedApp({
     return () => window.removeEventListener("eduinsight-language-change", handleLanguageChange);
   }, []);
   const reloadAdmin = async () => {
-    const [profile, apiStudents, apiTeachers, apiClasses, apiNotifications] = await Promise.all([
+    const [profile, apiStudents, apiTeachers, apiClasses] = await Promise.all([
       api.getAdminProfile(),
       api.getStudents(),
       api.getTeachers(),
       api.getClasses(),
-      api.getAdminNotifications(),
     ]);
+    const apiNotifications = await api.getAdminNotifications().catch(() => []);
     setAdminProfile(profile);
     setUserName(profile.full_name);
     setAdminNotifications(apiNotifications);
@@ -4561,14 +4561,14 @@ export function ConnectedApp({
 
     const loadData = async () => {
       if (sessionRole === "admin") {
-        const [profile, apiStudents, apiTeachers, apiClasses, apiNotifications] =
+        const [profile, apiStudents, apiTeachers, apiClasses] =
           await Promise.all([
             api.getAdminProfile(),
             api.getStudents(),
             api.getTeachers(),
             api.getClasses(),
-            api.getAdminNotifications(),
           ]);
+        const apiNotifications = await api.getAdminNotifications().catch(() => []);
         if (!cancelled) {
           setUserName(profile.full_name);
           setAdminProfile(profile);
