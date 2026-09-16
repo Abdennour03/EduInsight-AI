@@ -71,6 +71,19 @@ class StudentRepo:
 
         return students
 
+    def get_all_students_for_admin(self, admin_id):
+        self.db.cursor.execute(
+            """SELECT student_id, full_name, email,
+                      password, phone_number, level, class_id
+               FROM students
+               WHERE admin_id = ?""",
+            (admin_id,),
+        )
+        return [
+            Student(row[0], row[1], row[2], row[3], row[4], row[5], row[6])
+            for row in self.db.cursor.fetchall()
+        ]
+
     def get_students_by_level(self, level):
         self.db.cursor.execute("""
             SELECT student_id, full_name, email,

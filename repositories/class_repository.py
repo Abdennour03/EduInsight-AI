@@ -31,6 +31,13 @@ class ClassRepo:
         )
         return [ClassGroup(*row) for row in self.db.cursor.fetchall()]
 
+    def get_all_classes_for_admin(self, admin_id):
+        self.db.cursor.execute(
+            "SELECT id, name, academic_year, admin_id FROM classes WHERE admin_id = ? ORDER BY name",
+            (admin_id,),
+        )
+        return [ClassGroup(*row) for row in self.db.cursor.fetchall()]
+
     def search_classes(self, query, admin_id=None):
         self.db.cursor.execute(
                 """SELECT id, name, academic_year FROM classes

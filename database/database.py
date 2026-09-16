@@ -266,6 +266,14 @@ class Database:
             self.cursor.execute("ALTER TABLE admins ADD COLUMN password_hash TEXT")
         if "created_at" not in admin_columns:
             self.cursor.execute("ALTER TABLE admins ADD COLUMN created_at TEXT")
+        if "admin_id" in admin_columns:
+            self.cursor.execute(
+                """UPDATE admins
+                   SET id = COALESCE(id, admin_id),
+                       password_hash = COALESCE(password_hash, password),
+                       created_at = COALESCE(created_at, CURRENT_TIMESTAMP)
+                   WHERE id IS NULL"""
+            )
         class_columns = {
             row[1] for row in self.cursor.execute("PRAGMA table_info(classes)")
         }

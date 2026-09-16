@@ -30,16 +30,16 @@ class AdminController:
         return self.admin_service.assert_class_access(class_id, admin_id)
 
     def get_students(self, admin_id):
-        students = self.admin_service.student_service.student_repo.get_all_student(admin_id)
+        students = self.admin_service.student_service.student_repo.get_all_students_for_admin(admin_id)
         for student in students:
             student.class_ids = self.admin_service.student_service.student_repo.get_student_class_ids(student.student_id)
         return students
 
     def get_teachers(self, admin_id):
-        return self.admin_service.teacher_service.get_all_teachers(admin_id)
+        return self.admin_service.teacher_service.teacher_repo.get_all_teachers_for_admin(admin_id)
 
     def get_classes(self, admin_id):
-        return self.admin_service.class_service.get_all_classes(admin_id)
+        return self.admin_service.class_service.class_repo.get_all_classes_for_admin(admin_id)
 
     def create_class(self, data, admin_id):
         return self.admin_service.class_service.create_class(data.name, data.academic_year, admin_id)

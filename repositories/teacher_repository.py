@@ -47,6 +47,14 @@ class TeacherRepo:
         )
         return [self._teacher_from_row(row) for row in self.db.cursor.fetchall()]
 
+    def get_all_teachers_for_admin(self, admin_id):
+        self.db.cursor.execute(
+            """SELECT teacher_id, full_name, email, password, phone_number
+               FROM teachers WHERE admin_id = ? ORDER BY full_name""",
+            (admin_id,),
+        )
+        return [self._teacher_from_row(row) for row in self.db.cursor.fetchall()]
+
     def get_teacher_id_for_class(self, class_id):
         self.db.cursor.execute(
             "SELECT teacher_id FROM teacher_classes WHERE class_id = ?",
