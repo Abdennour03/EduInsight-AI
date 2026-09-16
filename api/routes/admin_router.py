@@ -21,6 +21,8 @@ from api.schemas.admin_schemas import (
     ClassResponse,
     ClassUpdate,
 )
+from api.schemas.notification_schema import AdminNotificationCreate
+from api.dependencies import notification_controller
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -33,6 +35,7 @@ def student_response(student):
         "phone_number": student.phone_number,
         "level": student.level,
         "class_id": student.class_id,
+        "class_ids": getattr(student, "class_ids", [student.class_id] if student.class_id is not None else []),
     }
 
 
@@ -58,6 +61,24 @@ def class_response(class_group):
         "class_id": class_group.class_id,
         "name": class_group.name,
         "academic_year": class_group.academic_year,
+    }
+
+
+def notification_response(notification):
+    if notification.admin_sender is not None:
+        sender_name = notification.admin_sender.full_name
+        sender_role = "admin"
+    else:
+        sender_name = notification.sender.full_name
+        sender_role = "teacher"
+    return {
+        "notification_id": notification.notification_id,
+        "title": notification.title,
+        "message": notification.message,
+        "teacher_id": getattr(notification.sender, "teacher_id", 0),
+        "teacher_name": sender_name,
+        "sender_role": sender_role,
+        "created_at": notification.created_at,
     }
 
 
@@ -249,5 +270,31 @@ def assign_teacher(teacher_id: int, data: TeacherClassAssignment, _admin=Depends
             teacher_id,
             all_class_ids,
         )}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+
+@router.get("/notifications")
+def list_admin_notifications(admin=Depends(get_current_admin)):
+    return [
+        notification_response(item)
+        for item in notification_controller.get_admin_notifications(admin.admin_id)
+    ]
+
+
+@router.post("/notifications")
+def send_admin_notification(
+    data: AdminNotificationCreate,
+    admin=Depends(get_current_admin),
+):
+    try:
+        result = notification_controller.send_admin_notification(
+            admin.admin_id,
+            data.title,
+            data.message,
+            student_id=data.student_id,
+            class_id=data.class_id,
+        )
+        return {"message": result}
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))

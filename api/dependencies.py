@@ -63,7 +63,7 @@ grade_service = GradeService(
     course_repo,
     submission_repo,
 )
-notification_service = NotificationService(notification_repo, student_notification_repo, teacher_repo, student_repo)
+notification_service = NotificationService(notification_repo, student_notification_repo, teacher_repo, student_repo, admin_repo)
 class_service = ClassService(class_repo)
 attendance_service = AttendanceService(attendance_repo, teacher_repo, class_service)
 admin_service = AdminService(admin_repo, student_service, teacher_service, class_service)

@@ -177,6 +177,53 @@ def create_my_submission(
         "status": submission.status
     }
 
+
+@router.put("/me/submissions/{submission_id}")
+def replace_my_submission(
+    submission_id: int,
+    file: UploadFile = File(...),
+    current_user=Depends(require_student),
+):
+    submission = submission_controller.get_submission(submission_id)
+    if submission.student_id != current_user.student_id:
+        raise HTTPException(status_code=403, detail="You can only edit your own submissions.")
+
+    new_file_path = save_submission_file(
+        file,
+        submission.exercise.exercise_id,
+        current_user.student_id,
+    )
+    try:
+        submission_controller.update_submission(submission_id, file_path=new_file_path)
+        delete_submission_file(submission.file_path)
+    except ValueError:
+        delete_submission_file(new_file_path)
+        raise
+
+    updated = submission_controller.get_submission(submission_id)
+    return {
+        "submission_id": updated.submission_id,
+        "student_id": updated.student_id,
+        "exercise_id": updated.exercise.exercise_id,
+        "submission_date": updated.submission_date,
+        "file_path": updated.file_path,
+        "status": updated.status,
+    }
+
+
+@router.delete("/me/submissions/{submission_id}")
+def delete_my_submission(
+    submission_id: int,
+    current_user=Depends(require_student),
+):
+    submission = submission_controller.get_submission(submission_id)
+    if submission.student_id != current_user.student_id:
+        raise HTTPException(status_code=403, detail="You can only delete your own submissions.")
+
+    submission_controller.delete_submission(submission_id)
+    delete_submission_file(submission.file_path)
+    return {"message": "Submission deleted successfully."}
+
 from api.dependencies import require_student
 from api.dependencies import grade_controller
 from fastapi import Depends

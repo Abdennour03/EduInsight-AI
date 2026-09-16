@@ -31,7 +31,13 @@ class StudentService:
         students = self.student_repo.get_all_student()
         if not students:
             raise ValueError("No students found.")
+        for student in students:
+            student.class_ids = self.student_repo.get_student_class_ids(student.student_id)
         return students
+
+    def set_student_classes(self, student_id, class_ids):
+        self.get_student(student_id)
+        self.student_repo.set_student_class_ids(student_id, class_ids)
 
     def get_students_by_level(self, level):
         if not isinstance(level, str):

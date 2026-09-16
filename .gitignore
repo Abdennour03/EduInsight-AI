@@ -1,5 +1,17 @@
 # Virtual Environment
 .venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local runtime data
+eduinsight.db
+eduinsight.db-*
+uploads/submissions/*
+
+# Local archives and design references
+*.zip
+.venv/
 
 # Python
 __pycache__/

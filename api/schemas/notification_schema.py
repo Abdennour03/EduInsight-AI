@@ -7,7 +7,15 @@ class NotificationResponse(BaseModel):
     message: str
     teacher_id: int
     teacher_name: str
+    sender_role: str = "teacher"
     created_at: str
+
+
+class AdminNotificationCreate(BaseModel):
+    title: str
+    message: str
+    class_id: int | None = None
+    student_id: int | None = None
 
 
 class NotificationCreate(BaseModel):
@@ -20,6 +28,7 @@ class NotificationCreate(BaseModel):
 class TeacherNotificationCreate(BaseModel):
     title: str
     message: str
+    class_id: int | None = None
 
 
 class NotificationUpdate(BaseModel):

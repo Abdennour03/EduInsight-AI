@@ -7,3 +7,6 @@ class NotificationController:
 
     def create_notification(self, title, message, teacher_id):
         return self.notification_service.create_notification(title, message, teacher_id)
+
+    def get_admin_notifications(self, admin_id):
+        return self.notification_service.get_admin_notifications(admin_id)

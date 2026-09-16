@@ -74,11 +74,28 @@ class AdminService:
         return teacher
 
     def update_student(self, student_id, updates):
+        class_ids = updates.pop("class_ids", None) if "class_ids" in updates else None
         class_id = updates.pop("class_id", None) if "class_id" in updates else None
         result = self.student_service.update_student(student_id, **updates)
+        if class_ids is not None:
+            self._validate_student_class_levels(class_ids)
+            self.student_service.set_student_classes(student_id, class_ids)
         if class_id is not None:
             self.assign_student_to_class(student_id, class_id)
         return result
+
+    def _validate_student_class_levels(self, class_ids):
+        if not class_ids:
+            raise ValueError("Select at least one class.")
+        levels = set()
+        for class_id in class_ids:
+            class_group = self.class_service.get_class(class_id)
+            level = class_group.name.strip().split()[0].upper()
+            levels.add(level)
+        if len(levels) > 1:
+            raise ValueError(
+                "Impossible to combine classes from different academic levels (e.g., 3AC and 1BAC)."
+            )
 
     def update_teacher(self, teacher_id, updates):
         class_ids = updates.pop("class_ids", None) if "class_ids" in updates else None

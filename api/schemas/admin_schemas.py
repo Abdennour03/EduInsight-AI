@@ -52,6 +52,7 @@ class AdminStudentUpdate(BaseModel):
     phone_number: str | None = None
     level: str | None = None
     class_id: int | None = None
+    class_ids: list[int] | None = None
 
 
 class AdminTeacherCreate(BaseModel):

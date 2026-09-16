@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   api,
   type ApiStudent,
@@ -22,8 +22,10 @@ import {
   BarChart3,
   Bell,
   BookOpen,
+  Award,
   CalendarDays,
   Check,
+  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -31,19 +33,28 @@ import {
   Download,
   Eye,
   EyeOff,
+  FileText,
+  Filter,
   GraduationCap,
   LayoutDashboard,
   LogOut,
   Menu,
   MoreHorizontal,
+  Pause,
   Pencil,
   Plus,
+  Play,
+  RotateCcw,
   Search,
+  Send,
   Settings,
   ShieldCheck,
   Sparkles,
+  Target,
+  TrendingUp,
   Users,
   X,
+  Timer,
 } from "lucide-react";
 import {
   Bar,
@@ -51,12 +62,15 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  Legend,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import { jsPDF } from "jspdf";
+import { LANGUAGE_KEY, type Language, translate } from "../../lib/i18n";
 
 type Role = "Student" | "Teacher" | "Admin";
 
@@ -102,11 +116,12 @@ let students = [
 
 // student_id is added on top of the mock shape so real API rows (which do
 // carry a student_id) can be tracked through the admin UI for reports/delete.
-type AdminStudent = (typeof students)[number] & { student_id?: number };
+type AdminStudent = (typeof students)[number] & { student_id?: number; class_id?: number | null; class_ids?: number[]; phone_number?: string };
 type AdminTeacher = {
   teacher_id: number;
   full_name: string;
   email: string;
+  phone_number?: string;
   classes: { class_id: number; name: string; academic_year: string }[];
 };
 type AdminClass = { class_id: number; name: string; academic_year: string };
@@ -170,16 +185,18 @@ let courses = [
 
 function Avatar({
   initials,
+  image,
   className = "",
 }: {
   initials: string;
+  image?: string;
   className?: string;
 }) {
   return (
     <div
       className={`flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-[#0052CC] ${className}`}
     >
-      {initials}
+      {image ? <img src={image} alt="Profile" className="h-full w-full rounded-full object-cover" /> : initials}
     </div>
   );
 }
@@ -192,6 +209,7 @@ function Sidebar({
   userName,
   onLogout,
   setActive,
+  language,
 }: {
   role: Role;
   open: boolean;
@@ -200,6 +218,7 @@ function Sidebar({
   userName: string;
   onLogout: () => void;
   setActive: (value: string) => void;
+  language: Language;
 }) {
   const items =
     role === "Student"
@@ -207,22 +226,24 @@ function Sidebar({
         ["Overview", LayoutDashboard],
         ["My Courses", BookOpen],
         ["Progress", BarChart3],
+        ["Profile", Settings],
       ]
       : role === "Teacher"
         ? [
-          ["Overview", LayoutDashboard],
+          ["Dashboard", LayoutDashboard],
+          ["My Classes", GraduationCap],
+          ["My Students", Users],
           ["My Courses", BookOpen],
           ["Submissions", ClipboardCheck],
           ["Attendance", CalendarDays],
-          ["My Classes", Users],
+          ["Notifications", Bell],
+          ["Profile", Settings],
         ]
         : [
-          // Students / Teachers / Classes management is unified inside the
-          // Overview tab-group in AdminWorkspace, so no separate sidebar
-          // entries are needed for them. Reports is now the primary
-          // analytics view for admins.
           ["Overview", LayoutDashboard],
           ["Reports", BarChart3],
+          ["Notifications", Bell],
+          ["Profile", Settings],
         ];
   return (
     <>
@@ -237,12 +258,12 @@ function Sidebar({
         className={`fixed inset-y-0 left-0 z-40 flex w-[250px] flex-col border-r border-[#E2E8F0] bg-white text-[#334155] transition-transform lg:static lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="flex h-20 items-center gap-3 border-b border-[#E2E8F0] px-6">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0052CC] text-white">
-            <BookOpen size={18} />
+          <div className={`flex h-11 w-11 shrink-0 aspect-square items-center justify-center rounded-xl text-white ${role === "Admin" ? "bg-[#15803D]" : "bg-[#0052CC]"}`}>
+            <GraduationCap size={22} strokeWidth={2.2} />
           </div>
           <div>
             <div className="font-bold tracking-tight text-[#0F172A]">
-              EduInsight <span className="text-[#0052CC]">AI</span>
+              EduInsight <span className={role === "Admin" ? "text-[#EAB308]" : "text-[#0052CC]"}>AI</span>
             </div>
             <div className="text-[10px] uppercase tracking-[.22em] text-[#64748B]">
               AI-Powered Learning Platform
@@ -257,14 +278,14 @@ function Sidebar({
         </div>
         <div className="px-4 pt-6">
           <div className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[.2em] text-[#64748B]">
-            Workspace
+            {translate(language, "workspace")}
           </div>
           {items.map(([label, Icon]) => (
             <button
               key={label as string}
               onClick={() => {
                 const section =
-                  label === "Overview"
+                  label === "Overview" || label === "Dashboard"
                     ? "overview"
                     : (label as string).toLowerCase().replaceAll(" ", "-");
                 setActive(label as string);
@@ -273,10 +294,10 @@ function Sidebar({
                   ?.scrollIntoView({ behavior: "smooth" });
                 setOpen(false);
               }}
-              className={`mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${active === label ? "bg-[#EFF6FF] font-semibold text-[#0052CC]" : "text-[#334155] hover:bg-[#F8FAFC] hover:text-[#0052CC]"}`}
+              className={`mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${active === label ? role === "Admin" ? "bg-[#FEF9C3] font-semibold text-[#15803D]" : "bg-[#EFF6FF] font-semibold text-[#0052CC]" : "text-[#334155] hover:bg-[#F8FAFC] hover:text-[#15803D]"}`}
             >
               <Icon size={17} />
-              <span>{label as string}</span>
+              <span>{translate(language, label === "Overview" ? "overview" : (label as string).toLowerCase().replaceAll(" ", ""))}</span>
               {label === "Announcements" && (
                 <span className="ml-auto rounded-full bg-[#0052CC] px-2 py-0.5 text-[10px] text-white">
                   3
@@ -306,9 +327,9 @@ function Sidebar({
           </div>
           <button
             onClick={onLogout}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-[#DBEAFE] px-3 py-2 text-xs font-semibold text-[#0052CC] hover:bg-[#EFF6FF]"
+            className={`mt-4 flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${role === "Admin" ? "border-[#FDE68A] text-[#A16207] hover:bg-[#FEF9C3]" : "border-[#DBEAFE] text-[#0052CC] hover:bg-[#EFF6FF]"}`}
           >
-            <LogOut size={14} /> Logout
+            <LogOut size={14} /> {translate(language, "logout")}
           </button>
         </div>
       </aside>
@@ -322,41 +343,51 @@ function Topbar({
   onLogout,
   userName,
   notifications,
+  language,
 }: {
   role: Role;
   setOpen: (value: boolean) => void;
   onLogout: () => void;
   userName: string;
-  notifications: TeacherNotification[];
+  notifications: Array<{ notification_id: number; title: string; message: string }>;
+  language: Language;
 }) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   return (
-    <header className="relative flex min-h-20 items-center justify-between border-b border-[#DBEAFE] bg-white px-3 pb-3 pt-7 sm:px-5 md:px-8 lg:pt-3">
+    <header className="relative flex min-h-16 items-center justify-between border-b border-[#DBEAFE] bg-white px-3 py-3 sm:px-5 md:px-8">
       <div className="flex min-w-0 items-center gap-2.5">
         <button
           aria-label="Open navigation"
           onClick={() => setOpen(true)}
-          className="shrink-0 rounded-lg p-2 text-[#0052CC] hover:bg-[#EFF6FF] lg:hidden"
+          className={`shrink-0 rounded-lg p-2 hover:bg-[#F8FAFC] lg:hidden ${role === "Admin" ? "text-[#15803D]" : "text-[#0052CC]"}`}
         >
           <Menu size={20} />
         </button>
         <div className="min-w-0">
-          <div className="truncate text-[10px] font-bold uppercase tracking-[.14em] text-[#64748B] sm:text-xs">
-            {role} workspace
-          </div>
           <h1 className="truncate text-base font-bold text-[#0F172A] sm:text-xl">
-            {userName}
+            {role === "Teacher" ? "Dashboard" : userName}
           </h1>
+          <p className="truncate text-xs text-[#64748B]">{role === "Admin" ? translate(language, "adminWorkspace") : `${role} workspace`}</p>
         </div>
       </div>
       <div className="flex items-center gap-3">
+        {role === "Teacher" && (
+          <label className="hidden items-center gap-2 rounded-lg border border-[#DBEAFE] bg-[#F8FAFC] px-3 py-2 text-sm text-[#64748B] md:flex">
+            <Search size={16} />
+            <input
+              aria-label="Search"
+              placeholder="Search..."
+              className="w-44 bg-transparent outline-none placeholder:text-[#94A3B8]"
+            />
+          </label>
+        )}
         <button
           aria-label="Notifications"
           onClick={() => setNotificationsOpen((value) => !value)}
           className="relative rounded-xl border border-[#DBEAFE] p-2.5 text-[#475569] hover:bg-[#EFF6FF]"
         >
           <Bell size={18} />
-          <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#0052CC]" />
+          {notifications.length > 0 && <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#F59E0B]" />}
         </button>
         {notificationsOpen && (
           <div className="absolute right-24 top-16 z-50 w-80 rounded-xl border border-[#DBEAFE] bg-white p-4 shadow-lg">
@@ -382,12 +413,22 @@ function Topbar({
             )}
           </div>
         )}
-        <button
-          onClick={onLogout}
-          className="hidden items-center gap-2 rounded-xl border border-[#DBEAFE] px-3 py-2 text-xs font-semibold text-[#0052CC] hover:bg-[#EFF6FF] sm:flex"
-        >
-          <LogOut size={14} /> Logout
-        </button>
+        {role === "Teacher" ? (
+          <div className="hidden items-center gap-2 sm:flex">
+            <Avatar initials={userName.split(" ").map((part) => part[0]).join("").slice(0, 2)} />
+            <div className="leading-tight">
+              <p className="text-xs font-semibold text-[#0F172A]">{userName}</p>
+              <p className="text-[10px] text-[#64748B]">Teacher</p>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={onLogout}
+            className="hidden items-center gap-2 rounded-xl border border-[#DBEAFE] px-3 py-2 text-xs font-semibold text-[#0052CC] hover:bg-[#EFF6FF] sm:flex"
+          >
+            <LogOut size={14} /> Logout
+          </button>
+        )}
       </div>
     </header>
   );
@@ -398,12 +439,19 @@ function Stat({
   value,
   detail,
   icon: Icon,
+  tone = "blue",
 }: {
   label: string;
   value: string;
   detail?: string;
   icon: any;
+  tone?: "blue" | "green" | "yellow";
 }) {
+  const toneClasses = {
+    blue: "bg-blue-100 text-[#0052CC]",
+    green: "bg-emerald-100 text-emerald-700",
+    yellow: "bg-amber-100 text-amber-700",
+  }[tone];
   return (
     <div className="rounded-2xl border border-[#DBEAFE] bg-white p-3.5 shadow-[0_2px_12px_rgba(29,78,216,.06)] sm:p-5">
       <div className="flex items-start justify-between gap-2">
@@ -420,11 +468,45 @@ function Stat({
             </p>
           )}
         </div>
-        <div className="shrink-0 rounded-xl bg-[#EFF6FF] p-2 text-[#1D4ED8] sm:p-2.5">
+        <div className={`shrink-0 rounded-xl p-2 sm:p-2.5 ${toneClasses}`}>
           <Icon size={18} />
         </div>
       </div>
     </div>
+  );
+}
+
+function NotificationList({
+  notifications,
+  tone = "blue",
+}: {
+  notifications: Array<{ notification_id: number | string; title: string; message: string }>;
+  tone?: "blue" | "yellow";
+}) {
+  const colors = tone === "yellow"
+    ? { border: "border-[#FED7AA]", background: "bg-[#FFF7ED]", title: "text-[#7C2D12]", body: "text-[#9A3412]", dot: "bg-[#F59E0B]" }
+    : { border: "border-[#DBEAFE]", background: "bg-white", title: "text-[#0F172A]", body: "text-[#64748B]", dot: "bg-[#2563EB]" };
+
+  return (
+    <section className={`rounded-2xl border p-5 ${colors.border} ${colors.background}`}>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className={`font-bold ${colors.title}`}>Notifications</h2>
+        <span className="rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-bold text-[#64748B]">{notifications.length}</span>
+      </div>
+      {notifications.length ? (
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {notifications.map((notification) => (
+            <div key={notification.notification_id} className="flex gap-3">
+              <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${colors.dot}`} />
+              <div className="min-w-0">
+                <p className={`text-sm font-semibold ${colors.title}`}>{notification.title}</p>
+                <p className={`mt-1 text-xs leading-5 ${colors.body}`}>{notification.message}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : <p className={`mt-4 text-sm ${colors.body}`}>No notifications yet.</p>}
+    </section>
   );
 }
 
@@ -539,6 +621,7 @@ function DynamicTeacherWorkspace({
   exercises,
   grades,
   attendance,
+  teacherNotifications,
   onAttendanceSaved,
   reload,
 }: {
@@ -549,12 +632,30 @@ function DynamicTeacherWorkspace({
   exercises: TeacherExercise[];
   grades: Grade[];
   attendance: AttendanceRecord[];
+  teacherNotifications: TeacherNotification[];
   onAttendanceSaved: () => void;
   reload: () => Promise<void>;
 }) {
+  const [profileImage, setProfileImage] = useState("");
   const [classId, setClassId] = useState(teacher.classes[0]?.class_id ?? 0);
   const [exerciseId, setExerciseId] = useState(exercises[0]?.exercise_id ?? 0);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+
+  useEffect(() => {
+    setProfileImage(window.localStorage.getItem("eduinsight_teacher_profile_image") ?? "");
+  }, []);
+
+  const handleProfileImage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = String(reader.result);
+      setProfileImage(image);
+      window.localStorage.setItem("eduinsight_teacher_profile_image", image);
+    };
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => {
     if (exerciseId) {
@@ -567,7 +668,7 @@ function DynamicTeacherWorkspace({
   const [statuses, setStatuses] = useState<Record<number, "present" | "absent">>(() =>
     Object.fromEntries(
       students.map((student) => [student.student_id, "absent"]),
-    ),
+    ) as Record<number, "present" | "absent">,
   );
   const [saving, setSaving] = useState(false);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
@@ -585,8 +686,11 @@ function DynamicTeacherWorkspace({
   const [announcementTitle, setAnnouncementTitle] = useState("");
   const [announcementMessage, setAnnouncementMessage] = useState("");
   const [dmStudentId, setDmStudentId] = useState<number | null>(null);
+  const [studentSearch, setStudentSearch] = useState("");
   const [dmTitle, setDmTitle] = useState("");
   const [dmMessage, setDmMessage] = useState("");
+  const [messageMode, setMessageMode] = useState<"student" | "class">("student");
+  const [broadcastClassId, setBroadcastClassId] = useState(teacher.classes[0]?.class_id ?? 0);
 
   const selectedStudents = students.filter(
     (student) => student.class_id === classId,
@@ -608,7 +712,7 @@ function DynamicTeacherWorkspace({
   useEffect(() => {
     const current = Object.fromEntries(
       students.map((student) => [student.student_id, "absent"] as const),
-    );
+    ) as Record<number, "present" | "absent">;
     attendance
       .filter((record) => record.date === today && record.class_id === classId)
       .forEach((record) => {
@@ -720,130 +824,356 @@ function DynamicTeacherWorkspace({
     }
   };
 
-  if (active === "My Classes") {
-    const activeClass = teacher.classes.find(c => c.class_id === classId);
+  const handleProfileSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const data = new FormData(e.currentTarget);
+    const password = String(data.get("password") ?? "");
+    setWorkspaceError("");
+    setSaving(true);
+    try {
+      await api.updateTeacherProfile({
+        full_name: String(data.get("full_name") ?? ""),
+        email: String(data.get("email") ?? ""),
+        phone_number: String(data.get("phone_number") ?? ""),
+        ...(password ? { password } : {}),
+      });
+      await reload();
+      setWorkspaceError("Profile updated successfully.");
+    } catch (profileError) {
+      setWorkspaceError(profileError instanceof Error ? profileError.message : "Unable to update profile.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (active === "Notifications") {
+    const matchingStudents = students.filter((student) =>
+      `${student.full_name} ${student.level ?? ""}`.toLowerCase().includes(studentSearch.toLowerCase()),
+    );
+    const selectedStudent = students.find((student) => student.student_id === dmStudentId);
     return (
-      <section id="my-classes" className="space-y-7">
+      <section id="notifications" className="space-y-6">
+        <div>
+          <p className="text-sm text-[#475569]">Contact one student directly</p>
+          <h2 className="mt-1 text-2xl font-bold text-[#0F172A]">Send a message</h2>
+        </div>
+        <div className="mb-2 flex w-fit rounded-xl bg-slate-100 p-1">
+          <button type="button" onClick={() => setMessageMode("student")} className={`rounded-lg px-4 py-2 text-xs font-bold ${messageMode === "student" ? "bg-white text-[#1769E0] shadow-sm" : "text-[#64748B]"}`}>One student</button>
+          <button type="button" onClick={() => setMessageMode("class")} className={`rounded-lg px-4 py-2 text-xs font-bold ${messageMode === "class" ? "bg-white text-[#1769E0] shadow-sm" : "text-[#64748B]"}`}>Whole class</button>
+        </div>
+        <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+          <section className="rounded-2xl border border-[#DBE2EA] bg-white p-5 shadow-[0_2px_10px_rgba(15,23,42,.03)]">
+            <div className="border-b border-slate-100 pb-4">
+              <div>
+                <h3 className="font-bold text-[#0F172A]">{messageMode === "student" ? "Find a student" : "Choose a class"}</h3>
+                <p className="mt-1 text-xs text-[#64748B]">{messageMode === "student" ? "Search by student name or academic level." : "The message will be sent to every student in this class."}</p>
+              </div>
+              {messageMode === "student" ? (
+                <input value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="Search name or level..." className="mt-4 w-full rounded-lg border border-[#DBE2EA] px-3 py-2.5 text-sm outline-none focus:border-[#0052CC]" />
+              ) : (
+                <select value={broadcastClassId} onChange={(event) => setBroadcastClassId(Number(event.target.value))} className="mt-4 w-full rounded-lg border border-[#DBE2EA] px-3 py-2.5 text-sm outline-none focus:border-[#0052CC]">
+                  {teacher.classes.map((item) => <option key={item.class_id} value={item.class_id}>{item.name} · {item.academic_year}</option>)}
+                </select>
+              )}
+            </div>
+            {messageMode === "student" && <div className="mt-3 divide-y divide-slate-100">
+              {matchingStudents.length ? matchingStudents.map((student) => (
+                <button key={student.student_id} type="button" onClick={() => setDmStudentId(student.student_id)} className={`flex w-full items-center gap-3 px-2 py-3 text-left ${dmStudentId === student.student_id ? "rounded-lg bg-blue-50" : "hover:bg-slate-50"}`}>
+                  <Avatar initials={student.full_name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()} />
+                  <span className="min-w-0 flex-1"><strong className="block truncate text-sm text-[#0F172A]">{student.full_name}</strong><span className="text-xs text-[#64748B]">{student.level ?? "No level"} · {student.email}</span></span>
+                  {dmStudentId === student.student_id && <Check className="size-4 text-[#1769E0]" />}
+                </button>
+              )) : <p className="py-8 text-center text-sm text-[#64748B]">No students match your search.</p>}
+            </div>}
+            {messageMode === "class" && <div className="mt-5 rounded-xl bg-blue-50 p-4"><p className="text-sm font-semibold text-[#1769E0]">{teacher.classes.find((item) => item.class_id === broadcastClassId)?.name}</p><p className="mt-1 text-xs text-[#64748B]">{students.filter((student) => student.class_id === broadcastClassId).length} students will receive this message.</p></div>}
+          </section>
+          <section className="rounded-2xl border border-[#DBE2EA] bg-white p-5 shadow-[0_2px_10px_rgba(15,23,42,.03)]">
+            <h3 className="font-bold text-[#0F172A]">Message student</h3>
+            <p className="mt-1 text-xs leading-5 text-[#64748B]">{messageMode === "student" ? (selectedStudent ? `Send a private message to ${selectedStudent.full_name}.` : "Select one student from the list first.") : "Send one message to every student in the selected class."}</p>
+            <form onSubmit={async (event) => { if (messageMode === "student") { await handleSendDirectMessage(event); return; } event.preventDefault(); if (!announcementTitle || !announcementMessage) return; setSaving(true); try { await api.sendClassAnnouncement({ title: announcementTitle, message: announcementMessage, class_id: broadcastClassId }); setAnnouncementTitle(""); setAnnouncementMessage(""); setWorkspaceError("Message sent to the class successfully."); } catch (error) { setWorkspaceError(error instanceof Error ? error.message : "Unable to send class message."); } finally { setSaving(false); } }} className="mt-5 space-y-4">
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">
+                Title
+                <input value={messageMode === "student" ? dmTitle : announcementTitle} onChange={(event) => messageMode === "student" ? setDmTitle(event.target.value) : setAnnouncementTitle(event.target.value)} required placeholder="Message title" className="rounded-lg border border-[#DBE2EA] px-3 py-2.5 font-normal outline-none focus:border-[#0052CC]" />
+              </label>
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">
+                Message
+                <textarea value={messageMode === "student" ? dmMessage : announcementMessage} onChange={(event) => messageMode === "student" ? setDmMessage(event.target.value) : setAnnouncementMessage(event.target.value)} required rows={5} placeholder="Write your message..." className="resize-none rounded-lg border border-[#DBE2EA] px-3 py-2.5 font-normal outline-none focus:border-[#0052CC]" />
+              </label>
+              <button type="submit" disabled={saving || (messageMode === "student" && dmStudentId === null)} className="rounded-xl bg-[#0052CC] px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
+                {saving ? "Sending..." : "Send message"}
+              </button>
+            </form>
+          </section>
+        </div>
+      </section>
+    );
+  }
+
+  if (active === "Profile") {
+    return (
+      <section id="profile" className="max-w-2xl space-y-6">
+        <div>
+          <p className="text-sm text-[#475569]">Your account details</p>
+          <h2 className="mt-1 text-2xl font-bold text-[#0F172A]">Profile</h2>
+        </div>
+        <form onSubmit={handleProfileSubmit} className="rounded-2xl border border-[#DBE2EA] bg-white p-6 shadow-[0_2px_10px_rgba(15,23,42,.03)]">
+          <div className="mb-6 flex items-center gap-4 border-b border-slate-100 pb-5">
+            <Avatar initials={teacher.full_name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()} className="h-12 w-12" />
+            <div>
+              <p className="font-bold text-[#0F172A]">{teacher.full_name}</p>
+              <p className="text-sm text-[#64748B]">Teacher account</p>
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">
+              Full name
+              <input name="full_name" defaultValue={teacher.full_name} required className="rounded-lg border border-[#DBE2EA] px-3 py-2.5 font-normal outline-none focus:border-[#0052CC]" />
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">
+              Email
+              <input name="email" type="email" defaultValue={teacher.email} required className="rounded-lg border border-[#DBE2EA] px-3 py-2.5 font-normal outline-none focus:border-[#0052CC]" />
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">
+              Phone number
+              <input name="phone_number" defaultValue={teacher.phone_number ?? ""} className="rounded-lg border border-[#DBE2EA] px-3 py-2.5 font-normal outline-none focus:border-[#0052CC]" />
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">
+              New password
+              <input name="password" type="password" placeholder="Leave blank to keep current" className="rounded-lg border border-[#DBE2EA] px-3 py-2.5 font-normal outline-none focus:border-[#0052CC]" />
+            </label>
+          </div>
+          {workspaceError && <p className={`mt-4 text-sm ${workspaceError.includes("success") ? "text-emerald-600" : "text-red-600"}`}>{workspaceError}</p>}
+          <button type="submit" disabled={saving} className="mt-6 rounded-xl bg-[#0052CC] px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50">
+            {saving ? "Saving..." : "Save changes"}
+          </button>
+        </form>
+      </section>
+    );
+  }
+
+  if (active === "My Students") {
+    return (
+      <section id="my-students" className="space-y-5">
+        <div>
+          <h2 className="text-2xl font-bold text-[#0F172A]">My Students</h2>
+          <p className="mt-1 text-sm text-[#64748B]">{students.length} students across your classes.</p>
+        </div>
+        <div className="overflow-hidden rounded-2xl border border-[#DBEAFE] bg-white">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-left">
+              <thead>
+                <tr className="border-b border-[#DBEAFE] text-sm text-[#334155]">
+                  <th className="px-4 py-4 font-semibold">Student</th>
+                  <th className="px-4 py-4 font-semibold">Class</th>
+                  <th className="px-4 py-4 font-semibold">Level</th>
+                  <th className="px-4 py-4 font-semibold">Average</th>
+                  <th className="px-4 py-4 text-right font-semibold">Performance</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#E2E8F0]">
+                {students.map((student) => {
+                  const studentGrades = grades.filter((grade) => grade.student_id === student.student_id);
+                  const normalizedScores = studentGrades.flatMap((grade) => {
+                    const exercise = exercises.find((item) => item.exercise_id === grade.exercise_id);
+                    const score = Number(grade.score);
+                    const maxScore = Number(exercise?.max_score);
+                    if (!Number.isFinite(score)) return [];
+                    if (Number.isFinite(maxScore) && maxScore > 0) return [(score / maxScore) * 20];
+                    return [score];
+                  });
+                  const average = normalizedScores.length
+                    ? normalizedScores.reduce((total, score) => total + score, 0) / normalizedScores.length
+                    : null;
+                  const performance = average === null
+                    ? null
+                    : average >= 16
+                      ? { label: "Excellent", className: "bg-emerald-50 text-emerald-600" }
+                      : average >= 12
+                        ? { label: "Good", className: "bg-emerald-50 text-emerald-600" }
+                        : { label: "Needs attention", className: "bg-amber-50 text-amber-600" };
+                  const initials = student.full_name
+                    .split(" ")
+                    .map((part) => part[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase();
+                  const studentClass = teacher.classes.find((item) => item.class_id === student.class_id);
+
+                  return (
+                    <tr key={student.student_id} className="hover:bg-[#F8FAFC]">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <Avatar initials={initials} />
+                          <div>
+                            <p className="text-sm font-semibold text-[#334155]">{student.full_name}</p>
+                            <p className="text-xs text-[#94A3B8]">{student.email}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-[#475569]">{studentClass?.name ?? "—"}</td>
+                      <td className="px-4 py-3 text-sm text-[#475569]">{student.level ?? "—"}</td>
+                      <td className={`px-4 py-3 text-sm font-bold ${average === null ? "text-[#64748B]" : average < 12 ? "text-amber-500" : "text-emerald-600"}`}>
+                        {average === null ? "—" : `${average.toFixed(1)} / 20`}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {performance ? (
+                          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${performance.className}`}>
+                            {performance.label}
+                          </span>
+                        ) : (
+                          <span className="text-sm text-[#64748B]">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {!students.length && <p className="p-8 text-center text-sm text-[#64748B]">No students assigned to your classes.</p>}
+        </div>
+      </section>
+    );
+  }
+
+  if (active === "My Classes") {
+    return (
+      <section id="my-classes" className="space-y-6">
         <div>
           <p className="text-sm text-[#475569]">Manage your students</p>
           <h2 className="mt-1 text-2xl font-bold text-[#0F172A]">My Classes</h2>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {teacher.classes.length ? (
-            teacher.classes.map((item) => (
-              <button
-                key={item.class_id}
-                onClick={() => setClassId(item.class_id)}
-                className={`flex flex-col rounded-2xl border p-5 text-left transition hover:border-[#0052CC] hover:shadow-sm ${classId === item.class_id ? "border-[#0052CC] bg-[#EFF6FF] shadow-sm" : "border-[#DBEAFE] bg-white"}`}
-              >
+        {teacher.classes.length ? (
+          <div className="grid items-start gap-6 xl:grid-cols-2">
+            {teacher.classes.map((item) => {
+          const classStudents = students.filter((student) => student.class_id === item.class_id);
+          const classCourses = courses.filter((course) => course.level === item.name);
+          const classScores = classStudents.flatMap((student) => grades
+            .filter((grade) => grade.student_id === student.student_id)
+            .flatMap((grade) => {
+              const exercise = exercises.find((entry) => entry.exercise_id === grade.exercise_id);
+              const score = Number(grade.score);
+              const maxScore = Number(exercise?.max_score);
+              if (!Number.isFinite(score)) return [];
+              return [Number.isFinite(maxScore) && maxScore > 0 ? (score / maxScore) * 20 : score];
+            }));
+          const classAverage = classScores.length
+            ? classScores.reduce((total, score) => total + score, 0) / classScores.length
+            : null;
+          const progress = classAverage === null ? 0 : Math.min(100, Math.max(0, (classAverage / 20) * 100));
 
-                <div className={`mb-4 flex h-10 w-10 items-center justify-center rounded-xl ${classId === item.class_id ? "bg-[#0052CC] text-white" : "bg-blue-50 text-[#0052CC]"}`}>
-                  <BookOpen size={20} />
+          return (
+            <div key={item.class_id} className="space-y-4">
+              <article className="max-w-xl rounded-2xl border border-[#DBE2EA] bg-white p-5 shadow-[0_2px_10px_rgba(15,23,42,.03)]">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-[#1769E0]"><BookOpen size={21} /></span>
+                  <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-[#1769E0]">{item.name}</span>
                 </div>
-                <p className="font-bold text-[#0F172A]">{item.name}</p>
-                <p className="mt-1 text-xs text-[#64748B]">
-                  {item.academic_year}
+                <h3 className="mt-4 text-lg font-bold text-[#0F172A]">{item.name}</h3>
+                <p className="mt-1 text-sm text-[#64748B]">{classStudents.length} students · {classCourses.length} of your courses</p>
+                <div className="mt-4 flex items-center justify-between text-sm">
+                  <span className="text-[#64748B]">Average Score</span>
+                  <span className={`font-bold ${classAverage === null ? "text-[#64748B]" : classAverage >= 12 ? "text-emerald-600" : "text-amber-500"}`}>
+                    {classAverage === null ? "No grades yet" : `${classAverage.toFixed(1)} / 20`}
+                  </span>
+                </div>
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#E8EEF4]"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${progress}%` }} /></div>
+                <p className={`mt-2 text-xs font-semibold ${classAverage !== null && classAverage >= 12 ? "text-emerald-600" : "text-[#64748B]"}`}>
+                  {classAverage === null ? "No grades yet" : classAverage >= 12 ? "Good" : "Needs attention"}
                 </p>
-              </button>
-            ))
-          ) : (
-            <p className="text-sm text-[#64748B]">No classes assigned.</p>
-          )}
-        </div>
+              </article>
 
-        {activeClass && (
-          <div className="rounded-2xl border border-[#DBEAFE] bg-white">
-            <div className="border-b border-[#DBEAFE] p-5">
-              <h3 className="font-bold text-[#0F172A]">{activeClass.name} — Enrolled Students</h3>
-              <p className="mt-1 text-xs text-[#64748B]">Total: {selectedStudents.length} students</p>
+              <div className="overflow-hidden rounded-2xl border border-[#DBE2EA] bg-white">
+                <div className="border-b border-[#DBE2EA] px-5 py-4">
+                  <h3 className="font-bold text-[#0F172A]">{item.name} — Student Statistics</h3>
+                  <p className="mt-1 text-xs text-[#64748B]">Grades are calculated on a 20-point scale.</p>
+                </div>
+                {classStudents.length ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead className="bg-[#F8FAFC] text-[10px] uppercase tracking-wider text-[#64748B]"><tr><th className="px-3 py-2.5">Student</th><th className="px-3 py-2.5">Average</th><th className="px-3 py-2.5 text-right">Performance</th></tr></thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {classStudents.map((student) => {
+                          const scores = grades.filter((grade) => grade.student_id === student.student_id).flatMap((grade) => {
+                            const exercise = exercises.find((entry) => entry.exercise_id === grade.exercise_id);
+                            const score = Number(grade.score);
+                            const maxScore = Number(exercise?.max_score);
+                            if (!Number.isFinite(score)) return [];
+                            return [Number.isFinite(maxScore) && maxScore > 0 ? (score / maxScore) * 20 : score];
+                          });
+                          const average = scores.length ? scores.reduce((total, score) => total + score, 0) / scores.length : null;
+                          const good = average !== null && average >= 12;
+                          return <tr key={student.student_id} className="hover:bg-[#F8FAFC]"><td className="px-3 py-2"><div className="flex items-center gap-2"><Avatar initials={student.full_name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()} className="h-8 w-8" /><span className="truncate text-sm font-semibold text-[#334155]">{student.full_name}</span></div></td><td className={`px-3 py-2 text-sm font-bold ${average === null ? "text-[#64748B]" : good ? "text-emerald-600" : "text-amber-500"}`}>{average === null ? "—" : `${average.toFixed(1)} / 20`}</td><td className="px-3 py-2 text-right"><span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${average === null ? "bg-slate-100 text-[#64748B]" : good ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"}`}>{average === null ? "No grades" : good ? "Good" : "Needs attention"}</span></td></tr>;
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : <p className="p-8 text-center text-sm text-[#64748B]">No students currently enrolled in this class.</p>}
+              </div>
             </div>
-            {selectedStudents.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50/50 text-[10px] uppercase tracking-wider text-[#475569]">
-                      <th className="px-5 py-3 font-semibold">Student Name</th>
-                      <th className="px-5 py-3 font-semibold">Email Address</th>
-                      <th className="px-5 py-3 font-semibold">Class Name</th>
-                      <th className="px-5 py-3 text-right font-semibold">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {selectedStudents.map((student) => (
-                      <tr key={student.student_id} className="transition hover:bg-slate-50/50">
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-3">
-                            <Avatar
-                              initials={student.full_name
-                                .split(" ")
-                                .map((part) => part[0])
-                                .join("")
-                                .slice(0, 2)
-                                .toUpperCase()}
-                            />
-                            <span className="text-sm font-semibold text-slate-800">
-                              {student.full_name}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-5 py-4 text-sm text-[#64748B]">
-                          {student.email}
-                        </td>
-                        <td className="px-5 py-4 text-sm font-medium text-slate-700">
-                          {activeClass.name}
-                        </td>
-                        <td className="px-5 py-4 text-right">
-                          <button className="rounded-lg p-2 text-[#475569] transition hover:bg-white hover:text-[#0052CC] hover:shadow-sm">
-                            <MoreHorizontal size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="p-8 text-center">
-                <Users className="mx-auto mb-3 text-slate-300" size={32} />
-                <p className="text-sm font-medium text-[#475569]">No students currently enrolled in this class</p>
-                <p className="mt-1 text-xs text-slate-500">Students must be assigned to this class by an administrator.</p>
-              </div>
-            )}
+          );
+            })}
           </div>
-        )}
+        ) : <p className="text-sm text-[#64748B]">No classes assigned.</p>}
       </section>
     );
   }
 
   if (active === "My Courses") {
     return (
-      <section id="my-courses" className="space-y-5">
-        <div>
-          <p className="text-sm text-[#475569]">Teaching materials</p>
-          <h2 className="mt-1 text-2xl font-bold text-[#0F172A]">My Courses</h2>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+      <section id="my-courses" className="space-y-6">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {courses.length ? courses.map((course) => {
             const courseExercises = exercises.filter(
               (exercise) => exercise.course.course_id === course.course_id,
             );
+            const courseClass = teacher.classes.find((item) => item.name === course.level);
+            const courseStudents = students.filter((student) => student.class_id === courseClass?.class_id);
+            const courseScores = courseStudents.flatMap((student) => grades
+              .filter((grade) => grade.student_id === student.student_id && courseExercises.some((exercise) => exercise.exercise_id === grade.exercise_id))
+              .flatMap((grade) => {
+                const exercise = courseExercises.find((item) => item.exercise_id === grade.exercise_id);
+                const score = Number(grade.score);
+                const maxScore = Number(exercise?.max_score);
+                if (!Number.isFinite(score)) return [];
+                return [Number.isFinite(maxScore) && maxScore > 0 ? (score / maxScore) * 20 : score];
+              }));
+            const courseAverage = courseScores.length
+              ? courseScores.reduce((total, score) => total + score, 0) / courseScores.length
+              : null;
+            const averageClass = courseAverage === null
+              ? "text-[#64748B]"
+              : courseAverage >= 12
+                ? "text-emerald-600"
+                : "text-amber-500";
             return (
-              <div key={course.course_id} className="rounded-2xl border border-[#DBEAFE] bg-white p-5">
+              <div key={course.course_id} className="flex flex-col rounded-2xl border border-[#DBEAFE] bg-white p-5 shadow-[0_2px_10px_rgba(15,23,42,.03)]">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-bold text-[#0F172A]">{course.course_name}</h3>
-                    <p className="mt-1 text-xs text-[#64748B]">{course.semester} · {course.level}</p>
-                  </div>
+                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-[#1769E0]">
+                    <BookOpen size={20} />
+                  </span>
                   {course.material_file_path && (
-                    <a href={getFileUrl(course.material_file_path)} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-[#0052CC]">
+                    <a href={getFileUrl(course.material_file_path)} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-[#0052CC] hover:underline">
                       View material
                     </a>
                   )}
                 </div>
+                <div className="mt-4">
+                  <h3 className="font-bold text-[#0F172A]">{course.course_name}</h3>
+                  <p className="mt-1 text-sm text-[#64748B]">{course.semester} · {course.level}</p>
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-slate-100 pt-3 text-sm text-[#64748B]">
+                  <span className="inline-flex items-center gap-1.5"><FileText size={14} />{courseExercises.length} exercise{courseExercises.length === 1 ? "" : "s"}</span>
+                  <span className="inline-flex items-center gap-1.5 text-amber-600"><Users size={14} />{courseStudents.length} student{courseStudents.length === 1 ? "" : "s"}</span>
+                </div>
+                <div className={`mt-3 rounded-lg bg-[#F8FAFC] px-3 py-2 ${averageClass}`}>
+                  <p className="text-xs">Class average</p>
+                  <p className="mt-0.5 text-base font-bold">{courseAverage === null ? "No grades yet" : `${courseAverage.toFixed(1)} / 20`}</p>
+                </div>
                 <div className="mt-4 space-y-2 border-t border-slate-100 pt-3">
                   {courseExercises.length ? courseExercises.map((exercise) => (
                     <div key={exercise.exercise_id} className="flex items-center justify-between gap-3 text-sm">
-                      <span className="text-slate-700">{exercise.exercise_name}</span>
+                      <span className="truncate text-[#334155]">{exercise.exercise_name}</span>
                       {exercise.material_file_path && (
                         <a href={getFileUrl(exercise.material_file_path)} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-[#0052CC]">
                           View file
@@ -852,6 +1182,10 @@ function DynamicTeacherWorkspace({
                     </div>
                   )) : <p className="text-xs text-[#64748B]">No exercises yet.</p>}
                 </div>
+                <div className="mt-auto flex items-center gap-1.5 border-t border-slate-100 pt-3 text-xs font-semibold text-[#1769E0]">
+                  <FileText size={14} />
+                  {courseExercises.length} exercise{courseExercises.length === 1 ? "" : "s"}
+                </div>
               </div>
             );
           }) : <p className="text-sm text-[#64748B]">No courses created yet.</p>}
@@ -859,79 +1193,6 @@ function DynamicTeacherWorkspace({
       </section>
     );
   }
-
-  if (active === "Attendance")
-    return (
-      <section id="attendance" className="space-y-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-2xl font-bold text-[#0F172A]">Attendance</h2>
-            <p className="mt-1 text-sm text-[#64748B]">
-              {today} · {attendancePercent}% present
-            </p>
-          </div>
-          <select
-            value={classId}
-            onChange={(event) => setClassId(Number(event.target.value))}
-            className="rounded-xl border border-[#DBEAFE] px-3 py-2 text-sm"
-          >
-            {teacher.classes.map((item) => (
-              <option key={item.class_id} value={item.class_id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="rounded-2xl border border-[#DBEAFE] bg-white p-5">
-          {selectedStudents.length ? (
-            selectedStudents.map((student) => (
-              <div
-                key={student.student_id}
-                className="flex items-center gap-3 border-b border-slate-50 py-3"
-              >
-                <Avatar
-                  initials={student.full_name
-                    .split(" ")
-                    .map((part) => part[0])
-                    .join("")
-                    .slice(0, 2)}
-                />
-                <span className="flex-1 text-sm font-semibold text-slate-700">
-                  {student.full_name}
-                </span>
-                <button
-                  onClick={() =>
-                    setStatuses({
-                      ...statuses,
-                      [student.student_id]:
-                        statuses[student.student_id] === "present"
-                          ? "absent"
-                          : "present",
-                    })
-                  }
-                  className={`rounded-full px-3 py-1.5 text-xs font-bold ${statuses[student.student_id] === "present" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-600"}`}
-                >
-                  {statuses[student.student_id] === "present"
-                    ? "Present"
-                    : "Absent"}
-                </button>
-              </div>
-            ))
-          ) : (
-            <p className="text-sm text-[#64748B]">
-              No students enrolled in this class.
-            </p>
-          )}
-          <button
-            onClick={saveAttendance}
-            disabled={saving || !classId}
-            className="mt-4 rounded-xl bg-[#0052CC] px-4 py-3 text-xs font-bold text-white disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save attendance"}
-          </button>
-        </div>
-      </section>
-    );
 
   if (active === "Submissions")
     return (
@@ -1115,23 +1376,6 @@ function DynamicTeacherWorkspace({
             ))}
           </select>
         </div>
-        <div className="flex gap-3">
-          <button
-            onClick={() => setShowCourseModal(true)}
-            className="rounded-xl bg-[#0052CC] px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-700 hover:shadow-md"
-          >
-            + Add Course
-          </button>
-          <button
-            onClick={() => {
-              if (courses.length > 0) setNewExerciseCourseId(courses[0].course_id);
-              setShowExerciseModal(true);
-            }}
-            className="rounded-xl border border-[#0052CC] px-5 py-3 text-sm font-bold text-[#0052CC] transition hover:bg-blue-50"
-          >
-            + Add Exercise
-          </button>
-        </div>
       </div>
       {workspaceError && (
         <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">
@@ -1284,41 +1528,103 @@ function DynamicTeacherWorkspace({
           </div>
         </div>
       )}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Stat
-          label="Class students"
-          value={String(selectedStudents.length)}
+          label="My Courses"
+          value={String(courses.length)}
+          icon={BookOpen}
+        />
+        <Stat
+          label="My Classes"
+          value={String(teacher.classes.length)}
+          icon={GraduationCap}
+          tone="green"
+        />
+        <Stat
+          label="My Students"
+          value={String(students.length)}
           icon={Users}
         />
         <Stat
-          label="Exercises"
-          value={String(exercises.length)}
+          label="To Grade"
+          value={String(Math.max(0, students.length - grades.length))}
+          detail="Submitted"
           icon={ClipboardCheck}
-        />
-        <Stat
-          label="Attendance today"
-          value={`${attendancePercent}%`}
-          icon={CalendarDays}
+          tone="yellow"
         />
       </div>
-      <div className="rounded-2xl border border-[#DBEAFE] bg-white p-5">
-        <h2 className="font-bold text-[#0F172A]">Classes and courses</h2>
-        {courses.length ? (
-          courses.map((course) => (
-            <div
-              key={course.course_id}
-              className="flex justify-between border-b border-slate-50 py-3 text-sm"
-            >
-              <span className="font-semibold text-slate-700">
-                {course.course_name}
-              </span>
-              <span className="text-[#64748B]">{course.level}</span>
+      <div className="grid gap-5 xl:grid-cols-5">
+        <section className="rounded-2xl border border-[#DBEAFE] bg-white p-5 xl:col-span-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="font-bold text-[#0F172A]">Submissions to Grade</h2>
+              <p className="mt-1 text-sm text-[#64748B]">Student work waiting for your feedback.</p>
             </div>
-          ))
-        ) : (
-          <p className="mt-3 text-sm text-[#64748B]">No courses available.</p>
-        )}
+            <button className="text-xs font-semibold text-[#0F172A] hover:text-[#0052CC]">Open <span className="ml-1 text-base">→</span></button>
+          </div>
+          <div className="mt-5 space-y-3">
+            {students.slice(0, 3).map((student, index) => {
+              const exercise = exercises[index % Math.max(exercises.length, 1)];
+              return (
+                <div key={student.student_id} className="flex items-center justify-between gap-3 rounded-lg border border-[#DBEAFE] bg-[#F8FAFC] px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Avatar initials={student.full_name.split(" ").map((part) => part[0]).join("").slice(0, 2)} />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-[#0F172A]">{student.full_name}</p>
+                      <p className="truncate text-xs text-[#64748B]">{exercise?.exercise_name ?? "Recent submission"} · {exercise?.course.course_name ?? "Course"}</p>
+                    </div>
+                  </div>
+                  <button className="rounded-lg border border-[#DBEAFE] bg-white px-3 py-1.5 text-xs font-semibold text-[#0F172A]">Grade</button>
+                </div>
+              );
+            })}
+            {!students.length && <p className="py-6 text-center text-sm text-[#64748B]">No submissions waiting for review.</p>}
+          </div>
+        </section>
+        <section className="rounded-2xl border border-[#DBEAFE] bg-white p-5 xl:col-span-2">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-bold text-[#0F172A]">Notifications</h2>
+            <button className="text-xs font-semibold text-[#0F172A]">All</button>
+          </div>
+          <div className="mt-5 space-y-5">
+            {(teacherNotifications.length ? teacherNotifications.slice(0, 3) : [
+              { notification_id: "attendance", title: "Attendance reminder", message: "Record attendance for today's class." },
+              { notification_id: "submissions", title: "New submissions to grade", message: `${Math.max(0, students.length - grades.length)} submissions are pending review.` },
+            ]).map((notification) => (
+              <div key={notification.notification_id} className="flex gap-3">
+                <span className="mt-1.5 size-2 shrink-0 rounded-full bg-[#2563EB]" />
+                <div>
+                  <p className="text-sm font-semibold text-[#0F172A]">{notification.title}</p>
+                  <p className="mt-1 text-xs leading-4 text-[#64748B]">{notification.message}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
+      <section className="rounded-2xl border border-[#DBEAFE] bg-white p-5">
+        <h2 className="font-bold text-[#0F172A]">Class Performance by Course</h2>
+        <p className="mt-1 text-sm text-[#64748B]">Average student score in each of your courses.</p>
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          {courses.slice(0, 4).map((course, index) => {
+            const progress = 55 + ((index * 13) % 35);
+            return (
+              <div key={course.course_id} className="rounded-lg border border-[#DBEAFE] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[#0F172A]">{course.course_name}</p>
+                    <p className="mt-1 text-xs text-[#64748B]">{course.semester} · {students.length} students</p>
+                  </div>
+                  <span className="text-sm font-bold text-emerald-600">{(progress / 5).toFixed(1)} / 20</span>
+                </div>
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#E2E8F0]"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${progress}%` }} /></div>
+              </div>
+            );
+          })}
+          {!courses.length && <p className="text-sm text-[#64748B]">No courses available.</p>}
+        </div>
+      </section>
+      <NotificationList notifications={teacherNotifications} />
     </section>
   );
 }
@@ -1344,10 +1650,10 @@ function AdminDashboard({
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
           <p className="text-sm text-[#475569]">
-            Manage your learning community
+            Administration workspace
           </p>
           <h2 className="mt-1 text-2xl font-bold tracking-tight text-[#0F172A]">
-            People & classes
+            People, classes &amp; access
           </h2>
         </div>
         <div className="flex gap-2">
@@ -1456,7 +1762,7 @@ function AdminDashboard({
           <div className="grid gap-3 p-5 sm:grid-cols-2">
             {(tab === "Teachers" ? teachers : classes).map((item) => (
               <div
-                key={item}
+                key={"teacher_id" in item ? item.teacher_id : item.class_id}
                 className="flex items-center gap-3 rounded-xl border border-[#DBEAFE] p-4"
               >
                 <div className="rounded-xl bg-blue-50 p-2.5 text-[#0052CC]">
@@ -1701,11 +2007,13 @@ function AdminWorkspace({
   teachers,
   classes,
   reload,
+  adminName,
 }: {
   students: AdminStudent[];
   teachers: AdminTeacher[];
   classes: AdminClass[];
   reload: () => Promise<void>;
+  adminName: string;
 }) {
   const [tab, setTab] = useState<"Students" | "Teachers" | "Classes">(
     "Students",
@@ -1715,9 +2023,20 @@ function AdminWorkspace({
   const [error, setError] = useState("");
   const [classAssignmentTeacher, setClassAssignmentTeacher] =
     useState<AdminTeacher | null>(null);
+  const [editingTeacher, setEditingTeacher] = useState<AdminTeacher | null>(null);
+  const [selectedTeacherClassIds, setSelectedTeacherClassIds] = useState<number[]>([]);
+  const [teacherEditError, setTeacherEditError] = useState("");
+  const [teacherEditSuccess, setTeacherEditSuccess] = useState("");
+  const [savingTeacher, setSavingTeacher] = useState(false);
   const [selectedClassIds, setSelectedClassIds] = useState<number[]>([]);
   const [assignmentError, setAssignmentError] = useState("");
   const [report, setReport] = useState<StudentReportData | null>(null);
+  const [openStudentMenu, setOpenStudentMenu] = useState<number | null>(null);
+  const [editingStudent, setEditingStudent] = useState<AdminStudent | null>(null);
+  const [studentEditError, setStudentEditError] = useState("");
+  const [studentEditSuccess, setStudentEditSuccess] = useState("");
+  const [savingStudent, setSavingStudent] = useState(false);
+  const [selectedStudentClassIds, setSelectedStudentClassIds] = useState<number[]>([]);
   const [editing, setEditing] = useState<{ type: string; id: number } | null>(
     null,
   );
@@ -1806,6 +2125,43 @@ function AdminWorkspace({
       );
     }
   };
+  const updateTeacher = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingTeacher) return;
+    const data = new FormData(event.currentTarget);
+    setTeacherEditError("");
+    setTeacherEditSuccess("");
+    const conflictingClass = classes.find((item) =>
+      selectedTeacherClassIds.includes(item.class_id) &&
+      teachers.some((teacher) =>
+        teacher.teacher_id !== editingTeacher.teacher_id &&
+        teacher.classes.some((assignedClass) => assignedClass.class_id === item.class_id),
+      ),
+    );
+    if (conflictingClass) {
+      setTeacherEditError(`Cannot assign ${conflictingClass.name} because it is already taught by another teacher.`);
+      return;
+    }
+    setSavingTeacher(true);
+    try {
+      await api.updateTeacher(editingTeacher.teacher_id, {
+        full_name: String(data.get("full_name") ?? ""),
+        email: String(data.get("email") ?? ""),
+        phone_number: String(data.get("phone_number") ?? ""),
+        ...(String(data.get("password") ?? "") ? { password: String(data.get("password")) } : {}),
+        class_ids: selectedTeacherClassIds,
+      });
+      setTeacherEditSuccess("Teacher information updated successfully.");
+      await reload();
+    } catch (updateError) {
+      const message = updateError instanceof Error ? updateError.message : "Unable to update teacher.";
+      const conflictingId = message.match(/Class ID (\d+)/)?.[1];
+      const conflictingClass = conflictingId ? classes.find((item) => item.class_id === Number(conflictingId)) : null;
+      setTeacherEditError(conflictingClass ? `Cannot assign ${conflictingClass.name} because it is already taught by another teacher.` : message);
+    } finally {
+      setSavingTeacher(false);
+    }
+  };
   const remove = async (type: string, id: number) => {
     if (!window.confirm("Delete this record?")) return;
     if (type === "student") await api.deleteStudent(id);
@@ -1813,8 +2169,54 @@ function AdminWorkspace({
     if (type === "class") await api.deleteClass(id);
     await reload();
   };
+  const updateStudent = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingStudent?.student_id) return;
+    const data = new FormData(event.currentTarget);
+    setStudentEditError("");
+    setStudentEditSuccess("");
+    const selectedClassIds = selectedStudentClassIds;
+    if (!selectedClassIds.length) {
+      setStudentEditError("Please select at least one class for the student.");
+      return;
+    }
+    const selectedClassId = selectedClassIds[0];
+    const selectedClasses = classes.filter((item) => selectedClassIds.includes(item.class_id));
+    const academicLevels = new Set(selectedClasses.map((item) => item.name.trim().split(/\s+/)[0].toUpperCase()));
+    if (academicLevels.size > 1) {
+      setStudentEditError("Impossible to combine classes from different academic levels (e.g., 3AC and 1BAC).");
+      return;
+    }
+    const selectedClass = selectedClasses[0];
+    setSavingStudent(true);
+    try {
+      await api.updateStudent(editingStudent.student_id, {
+        full_name: String(data.get("full_name") ?? ""),
+        email: String(data.get("email") ?? ""),
+        phone_number: String(data.get("phone_number") ?? ""),
+        ...(String(data.get("password") ?? "") ? { password: String(data.get("password")) } : {}),
+        class_id: selectedClassId,
+        class_ids: selectedClassIds,
+        level: selectedClass?.name,
+      });
+      setStudentEditSuccess("Student information updated successfully.");
+      await reload();
+    } catch (updateError) {
+      setStudentEditError(updateError instanceof Error ? updateError.message : "Unable to update student.");
+    } finally {
+      setSavingStudent(false);
+    }
+  };
   return (
     <section id="overview" className="space-y-7">
+      <section className="relative overflow-hidden rounded-2xl border border-[#DDE8DF] bg-[#F0FDF4] p-6 shadow-[0_2px_12px_rgba(22,101,52,.05)] sm:p-7">
+        <div className="absolute -right-10 -top-16 h-36 w-36 rounded-full bg-[#DCFCE7]" />
+        <div className="relative">
+          <div className="flex items-center gap-2 text-xs font-bold text-[#15803D]"><span className="h-2 w-2 rounded-full bg-[#EAB308]" /> Active administration workspace</div>
+          <h2 className="mt-3 text-2xl font-bold tracking-tight text-[#07152F] sm:text-3xl">Welcome back, {adminName}! <span aria-hidden="true">👋</span></h2>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-[#3F5875]">Manage your learning community, classes, and academic access from one place.</p>
+        </div>
+      </section>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-sm text-[#475569]">
@@ -1826,7 +2228,7 @@ function AdminWorkspace({
         </div>
         <button
           onClick={() => setFormOpen(true)}
-          className="rounded-xl bg-[#0052CC] px-4 py-3 text-xs font-bold text-white"
+          className="rounded-xl bg-[#EAB308] px-4 py-3 text-xs font-bold text-[#422006] transition hover:bg-[#FACC15]"
         >
           <Plus size={15} className="mr-2 inline" />
           Add {tab.slice(0, -1)}
@@ -1837,21 +2239,24 @@ function AdminWorkspace({
           label="Total students"
           value={String(students.length)}
           icon={GraduationCap}
+          tone="green"
         />
         <Stat
           label="Teaching staff"
           value={String(teachers.length)}
           icon={Users}
+          tone="yellow"
         />
         <Stat
           label="Active classes"
           value={String(classes.length)}
           icon={BookOpen}
+          tone="green"
         />
       </div>
-      <div className="rounded-2xl border border-[#DBEAFE] bg-white">
-        <div className="flex flex-wrap justify-between gap-4 border-b border-[#DBEAFE] p-5">
-          <div className="flex gap-1 rounded-lg bg-[#EFF6FF] p-1">
+      <div className="rounded-2xl border border-[#DDE8DF] bg-white shadow-[0_2px_12px_rgba(22,101,52,.05)]">
+        <div className="flex flex-wrap justify-between gap-4 border-b border-[#E2E8F0] p-5">
+          <div className="flex gap-1 rounded-lg bg-[#FEF9C3] p-1">
             {(["Students", "Teachers", "Classes"] as const).map((item) => (
               <button
                 key={item}
@@ -1859,7 +2264,7 @@ function AdminWorkspace({
                   setTab(item);
                   setQuery("");
                 }}
-                className={`rounded-md px-4 py-2 text-xs font-bold ${tab === item ? "bg-white text-[#0052CC] shadow-sm" : "text-[#475569]"}`}
+                className={`rounded-md px-4 py-2 text-xs font-bold ${tab === item ? "bg-white text-[#15803D] shadow-sm" : "text-[#475569]"}`}
               >
                 {item}
               </button>
@@ -1869,7 +2274,7 @@ function AdminWorkspace({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={`Search ${tab.toLowerCase()}...`}
-            className="rounded-lg border border-[#DBEAFE] px-3 py-2 text-xs"
+            className="rounded-lg border border-[#DDE8DF] px-3 py-2 text-xs outline-none focus:border-[#EAB308] focus:ring-2 focus:ring-[#FEF08A]"
           />
         </div>
         <div className="divide-y divide-slate-100 p-5">
@@ -1886,32 +2291,29 @@ function AdminWorkspace({
                       {item.email} · {item.className || "No class"}
                     </p>
                     {!item.className && (
-                      <p className="mt-0.5 text-[11px] font-semibold text-amber-600">
+                      <p className="mt-0.5 text-[11px] font-semibold text-[#B45309]">
                         No class assigned — won't see any courses or exercises
                       </p>
                     )}
                   </div>
-                  <button
-                    onClick={() =>
-                      item.student_id &&
-                      api
-                        .getStudentReport(item.student_id)
-                        .then((data) => setReport(data as StudentReportData))
-                    }
-                    disabled={!item.student_id}
-                    className="text-xs font-semibold text-[#0052CC] disabled:opacity-40"
-                  >
-                    Report
-                  </button>
-                  <button
-                    onClick={() =>
-                      item.student_id && remove("student", item.student_id)
-                    }
-                    disabled={!item.student_id}
-                    className="text-xs text-rose-600 disabled:opacity-40"
-                  >
-                    Delete
-                  </button>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      aria-label={`Actions for ${item.name}`}
+                      onClick={() => setOpenStudentMenu(openStudentMenu === item.student_id ? null : item.student_id ?? null)}
+                      disabled={!item.student_id}
+                      className="rounded-lg p-2 text-lg font-bold leading-none text-[#475569] transition hover:bg-[#FEF9C3] disabled:opacity-40"
+                    >
+                      ...
+                    </button>
+                    {openStudentMenu === item.student_id && item.student_id && (
+                      <div className="absolute right-0 top-10 z-20 w-48 rounded-xl border border-[#DDE8DF] bg-white p-1.5 text-left shadow-lg">
+                        <button type="button" onClick={() => { setEditingStudent(item); setSelectedStudentClassIds(item.class_ids?.length ? item.class_ids : item.class_id ? [item.class_id] : []); setOpenStudentMenu(null); setStudentEditError(""); setStudentEditSuccess(""); }} className="flex w-full rounded-lg px-3 py-2 text-xs font-semibold text-[#334155] hover:bg-[#FEF9C3]">Update information</button>
+                        <button type="button" onClick={() => { api.getStudentReport(item.student_id as number).then((data) => setReport(data as StudentReportData)); setOpenStudentMenu(null); }} className="flex w-full rounded-lg px-3 py-2 text-xs font-semibold text-[#A16207] hover:bg-[#FEF9C3]">Get grades</button>
+                        <button type="button" onClick={() => { remove("student", item.student_id as number); setOpenStudentMenu(null); }} className="flex w-full rounded-lg px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50">Delete</button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))
             ) : (
@@ -1941,13 +2343,14 @@ function AdminWorkspace({
                   </div>
                   <button
                     onClick={() => {
-                      setAssignmentError("");
-                      setSelectedClassIds([]);
-                      setClassAssignmentTeacher(item);
+                      setTeacherEditError("");
+                      setTeacherEditSuccess("");
+                      setSelectedTeacherClassIds(item.classes.map((assignedClass) => assignedClass.class_id));
+                      setEditingTeacher(item);
                     }}
-                    className="text-xs font-semibold text-[#0052CC]"
+                    className="text-xs font-semibold text-[#15803D]"
                   >
-                    Add class
+                    Update information
                   </button>
                   <button
                     onClick={() => remove("teacher", item.teacher_id)}
@@ -1967,7 +2370,7 @@ function AdminWorkspace({
                   key={item.class_id}
                   className="flex items-center gap-3 py-3"
                 >
-                  <BookOpen className="text-[#0052CC]" size={18} />
+                  <BookOpen className="text-[#15803D]" size={18} />
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-slate-800">
                       {item.name}
@@ -2170,6 +2573,73 @@ function AdminWorkspace({
           >
             Add selected classes
           </button>
+        </div>
+      )}
+      {editingTeacher && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" onClick={() => setEditingTeacher(null)}>
+          <form onSubmit={updateTeacher} onClick={(event) => event.stopPropagation()} className="w-full max-w-2xl rounded-2xl border border-[#DDE8DF] bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#15803D]">Teacher account</p>
+                <h3 className="mt-1 text-xl font-bold text-[#0F172A]">Update {editingTeacher.full_name}</h3>
+              </div>
+              <button type="button" onClick={() => setEditingTeacher(null)} className="rounded-lg px-2 py-1 text-xl text-[#64748B] hover:bg-slate-100" aria-label="Close">&times;</button>
+            </div>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">Full name<input name="full_name" required defaultValue={editingTeacher.full_name} className="rounded-lg border border-[#DDE8DF] px-3 py-2.5 font-normal outline-none focus:border-[#EAB308]" /></label>
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">Email<input name="email" type="email" required defaultValue={editingTeacher.email} className="rounded-lg border border-[#DDE8DF] px-3 py-2.5 font-normal outline-none focus:border-[#EAB308]" /></label>
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">Phone number<input name="phone_number" defaultValue={editingTeacher.phone_number ?? ""} className="rounded-lg border border-[#DDE8DF] px-3 py-2.5 font-normal outline-none focus:border-[#EAB308]" /></label>
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">New password<input name="password" type="password" placeholder="Leave blank to keep current" className="rounded-lg border border-[#DDE8DF] px-3 py-2.5 font-normal outline-none focus:border-[#EAB308]" /></label>
+              <fieldset className="sm:col-span-2">
+                <legend className="text-sm font-semibold text-[#334155]">Teaching classes</legend>
+                <div className="mt-1.5 grid max-h-44 gap-2 overflow-y-auto rounded-lg border border-[#DDE8DF] p-3 sm:grid-cols-2">
+                  {classes.map((item) => {
+                    const assignedToOtherTeacher = teachers.some((teacher) => teacher.teacher_id !== editingTeacher.teacher_id && teacher.classes.some((assignedClass) => assignedClass.class_id === item.class_id));
+                    return <label key={item.class_id} className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${assignedToOtherTeacher ? "cursor-not-allowed bg-slate-50 text-slate-400" : "cursor-pointer hover:bg-[#FEF9C3]"}`}><input type="checkbox" checked={selectedTeacherClassIds.includes(item.class_id)} disabled={assignedToOtherTeacher} onChange={(event) => setSelectedTeacherClassIds((current) => event.target.checked ? [...current, item.class_id] : current.filter((id) => id !== item.class_id))} className="h-4 w-4 accent-[#15803D]" /><span>{item.name} · {item.academic_year}{assignedToOtherTeacher ? " (assigned)" : ""}</span></label>;
+                  })}
+                </div>
+                <p className="mt-1 text-xs font-normal text-[#64748B]">Teachers can teach classes across different academic levels.</p>
+              </fieldset>
+            </div>
+            {teacherEditError && <p role="alert" className="mt-4 rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700">{teacherEditError}</p>}
+            {teacherEditSuccess && <p role="status" className="mt-4 rounded-lg bg-[#DCFCE7] p-3 text-sm font-semibold text-[#166534]">{teacherEditSuccess}</p>}
+            <div className="mt-6 flex flex-wrap justify-between gap-3">
+              <button type="button" onClick={() => { setEditingTeacher(null); remove("teacher", editingTeacher.teacher_id); }} className="rounded-lg px-4 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50">Delete teacher</button>
+              <div className="flex gap-3"><button type="button" onClick={() => setEditingTeacher(null)} className="rounded-lg border border-[#DDE8DF] px-4 py-2.5 text-sm font-semibold text-[#475569]">Cancel</button><button type="submit" disabled={savingTeacher} className="rounded-lg bg-[#EAB308] px-4 py-2.5 text-sm font-bold text-[#422006] disabled:opacity-50">{savingTeacher ? "Saving..." : "Save changes"}</button></div>
+            </div>
+          </form>
+        </div>
+      )}
+      {editingStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" onClick={() => setEditingStudent(null)}>
+          <form id="student-update-form" onSubmit={updateStudent} onClick={(event) => event.stopPropagation()} className="w-full max-w-xl rounded-2xl border border-[#DDE8DF] bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#15803D]">Student account</p>
+                <h3 className="mt-1 text-xl font-bold text-[#0F172A]">Update {editingStudent.name}</h3>
+              </div>
+              <button type="button" onClick={() => setEditingStudent(null)} className="rounded-lg px-2 py-1 text-xl text-[#64748B] hover:bg-slate-100" aria-label="Close">&times;</button>
+            </div>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">Full name<input name="full_name" required defaultValue={editingStudent.name} className="rounded-lg border border-[#DDE8DF] px-3 py-2.5 font-normal outline-none focus:border-[#EAB308]" /></label>
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">Email<input name="email" type="email" required defaultValue={editingStudent.email} className="rounded-lg border border-[#DDE8DF] px-3 py-2.5 font-normal outline-none focus:border-[#EAB308]" /></label>
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">Phone number<input name="phone_number" defaultValue={editingStudent.phone_number ?? ""} className="rounded-lg border border-[#DDE8DF] px-3 py-2.5 font-normal outline-none focus:border-[#EAB308]" /></label>
+              <fieldset className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155] sm:col-span-2">
+                <legend>Classes</legend>
+                <div className="grid max-h-36 gap-2 overflow-y-auto rounded-lg border border-[#DDE8DF] p-3 sm:grid-cols-2">
+                  {classes.map((item) => <label key={item.class_id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 font-normal hover:bg-[#FEF9C3]"><input type="checkbox" checked={selectedStudentClassIds.includes(item.class_id)} onChange={(event) => setSelectedStudentClassIds((current) => event.target.checked ? [...current, item.class_id] : current.filter((id) => id !== item.class_id))} className="h-4 w-4 accent-[#15803D]" /><span>{item.name} · {item.academic_year}</span></label>)}
+                </div>
+                <span className="text-xs font-normal text-[#64748B]">Select one or more classes from the same academic level.</span>
+              </fieldset>
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155] sm:col-span-2">New password<input name="password" type="password" placeholder="Leave blank to keep current" className="rounded-lg border border-[#DDE8DF] px-3 py-2.5 font-normal outline-none focus:border-[#EAB308]" /></label>
+            </div>
+            {studentEditError && <p role="alert" className="mt-4 rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700">{studentEditError}</p>}
+            {studentEditSuccess && <p role="status" className="mt-4 rounded-lg bg-[#DCFCE7] p-3 text-sm font-semibold text-[#166534]">{studentEditSuccess}</p>}
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setEditingStudent(null)} className="rounded-lg border border-[#DDE8DF] px-4 py-2.5 text-sm font-semibold text-[#475569]">Cancel</button>
+              <button type="submit" disabled={savingStudent} className="rounded-lg bg-[#EAB308] px-5 py-2.5 text-sm font-bold text-[#422006] shadow-sm transition hover:bg-[#FACC15] disabled:cursor-not-allowed disabled:opacity-50">{savingStudent ? "Saving..." : "Save changes"}</button>
+            </div>
+          </form>
         </div>
       )}
       {report && (
@@ -2405,7 +2875,7 @@ function StudentReportModal({
             {!entry?.loading && !entry?.error && (
               <button
                 onClick={downloadPdf}
-                className="rounded-lg bg-[#0052CC] px-3 py-2 text-xs font-bold text-white hover:bg-blue-700"
+                className="rounded-lg bg-[#EAB308] px-3 py-2 text-xs font-bold text-[#422006] hover:bg-[#FACC15]"
               >
                 Download PDF
               </button>
@@ -2431,11 +2901,13 @@ function StudentReportModal({
                 label="Average score"
                 value={average !== null ? average.toFixed(2) : "-"}
                 icon={BarChart3}
+                tone="green"
               />
               <Stat
                 label="Graded exercises"
                 value={`${gradedCount} / ${exercisesAndExams.length}`}
                 icon={ClipboardCheck}
+                tone="yellow"
               />
             </div>
 
@@ -2511,6 +2983,137 @@ function StudentReportModal({
         )}
       </div>
     </div>
+  );
+}
+
+function AdminProfile({
+  profile,
+  reload,
+}: {
+  profile: { admin_id: number; full_name: string; email: string };
+  reload: () => Promise<void>;
+}) {
+  const [feedback, setFeedback] = useState("");
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const password = String(data.get("password") ?? "");
+    try {
+      await api.updateAdminProfile({
+        full_name: String(data.get("full_name") ?? ""),
+        email: String(data.get("email") ?? ""),
+        ...(password ? { password } : {}),
+      });
+      await reload();
+      setFeedback("Profile updated successfully.");
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Unable to update profile.");
+    }
+  };
+
+  return (
+    <section id="profile" className="max-w-3xl space-y-6">
+      <div>
+        <p className="text-sm font-semibold text-[#15803D]">Administrator account</p>
+        <h2 className="mt-1 text-2xl font-bold text-[#0F172A]">Profile</h2>
+      </div>
+      <form onSubmit={handleSubmit} className="rounded-2xl border border-[#DDE8DF] bg-white p-6 shadow-[0_2px_12px_rgba(22,101,52,.05)]">
+        <div className="mb-6 flex items-center gap-4 border-b border-slate-100 pb-5">
+          <Avatar initials={profile.full_name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()} className="h-12 w-12 bg-[#FEF9C3] text-[#A16207]" />
+          <div>
+            <p className="font-bold text-[#0F172A]">{profile.full_name}</p>
+            <p className="text-sm text-[#64748B]">Admin account</p>
+          </div>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">Full name<input name="full_name" defaultValue={profile.full_name} required className="rounded-lg border border-[#DDE8DF] px-3 py-2.5 font-normal outline-none focus:border-[#EAB308] focus:ring-2 focus:ring-[#FEF08A]" /></label>
+          <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">Email<input name="email" type="email" defaultValue={profile.email} required className="rounded-lg border border-[#DDE8DF] px-3 py-2.5 font-normal outline-none focus:border-[#EAB308] focus:ring-2 focus:ring-[#FEF08A]" /></label>
+          <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155] sm:col-span-2">New password<input name="password" type="password" placeholder="Leave blank to keep current" className="rounded-lg border border-[#DDE8DF] px-3 py-2.5 font-normal outline-none focus:border-[#EAB308] focus:ring-2 focus:ring-[#FEF08A]" /></label>
+        </div>
+        {feedback && <p className={`mt-4 text-sm ${feedback.includes("successfully") ? "text-[#15803D]" : "text-rose-600"}`}>{feedback}</p>}
+        <button type="submit" className="mt-6 rounded-xl bg-[#EAB308] px-5 py-2.5 text-sm font-bold text-[#422006] transition hover:bg-[#FACC15]">Save changes</button>
+      </form>
+    </section>
+  );
+}
+
+function AdminNotifications({
+  students,
+  classes,
+  reload,
+  language,
+}: {
+  students: AdminStudent[];
+  classes: AdminClass[];
+  reload: () => Promise<void>;
+  language: Language;
+}) {
+  const [recipientMode, setRecipientMode] = useState<"class" | "student">("class");
+  const [selectedClassId, setSelectedClassId] = useState<number>(classes[0]?.class_id ?? 0);
+  const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
+  const [feedback, setFeedback] = useState("");
+  const [saving, setSaving] = useState(false);
+  const classStudents = students.filter((student) => {
+    return student.class_id === selectedClassId;
+  });
+
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    if (recipientMode === "student" && selectedStudentId === null) {
+      setFeedback(translate(language, "selectStudentFirst"));
+      return;
+    }
+    setSaving(true);
+    setFeedback("");
+    try {
+      await api.sendAdminNotification({
+        title: String(data.get("title") ?? ""),
+        message: String(data.get("message") ?? ""),
+        ...(recipientMode === "class" ? { class_id: selectedClassId } : { student_id: selectedStudentId ?? undefined }),
+      });
+      event.currentTarget.reset();
+      setFeedback(translate(language, "notificationSent"));
+      await reload();
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Unable to send notification.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section id="notifications" className="space-y-6">
+      <div>
+        <p className="text-sm font-semibold text-[#15803D]">{translate(language, "communicationCenter")}</p>
+        <h2 className="mt-1 text-2xl font-bold text-[#0F172A]">{translate(language, "notificationsTitle")}</h2>
+        <p className="mt-1 text-sm text-[#64748B]">{translate(language, "sendToClassOrStudent")}</p>
+      </div>
+      <div className="max-w-3xl">
+        <form onSubmit={submit} className="rounded-2xl border border-[#DDE8DF] bg-white p-6 shadow-[0_2px_12px_rgba(22,101,52,.05)]">
+          <div className="mb-5 flex gap-1 rounded-lg bg-[#FEF9C3] p-1">
+            <button type="button" onClick={() => { setRecipientMode("class"); setSelectedStudentId(null); }} className={`flex-1 rounded-md px-4 py-2 text-xs font-bold ${recipientMode === "class" ? "bg-white text-[#15803D] shadow-sm" : "text-[#64748B]"}`}>{translate(language, "wholeClass")}</button>
+            <button type="button" onClick={() => setRecipientMode("student")} className={`flex-1 rounded-md px-4 py-2 text-xs font-bold ${recipientMode === "student" ? "bg-white text-[#15803D] shadow-sm" : "text-[#64748B]"}`}>{translate(language, "oneStudent")}</button>
+          </div>
+          <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">{translate(language, "class")}
+            <select value={selectedClassId} onChange={(event) => { setSelectedClassId(Number(event.target.value)); setSelectedStudentId(null); }} className="rounded-lg border border-[#DDE8DF] px-3 py-2.5 font-normal outline-none focus:border-[#EAB308] focus:ring-2 focus:ring-[#FEF08A]">
+              {classes.map((item) => <option key={item.class_id} value={item.class_id}>{item.name} · {item.academic_year}</option>)}
+            </select>
+          </label>
+          {recipientMode === "student" && <div className="mt-4 space-y-2">
+            <p className="text-sm font-semibold text-[#334155]">{translate(language, "selectStudent")}</p>
+            {classStudents.length ? classStudents.map((student) => <button type="button" key={student.student_id ?? student.email} onClick={() => setSelectedStudentId(student.student_id ?? null)} className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left ${selectedStudentId === student.student_id ? "border-[#EAB308] bg-[#FEF9C3]" : "border-[#E2E8F0] hover:bg-[#F8FAFC]"}`}><Avatar initials={student.initials} className="h-8 w-8" /><span className="min-w-0 flex-1"><strong className="block truncate text-sm text-[#0F172A]">{student.name}</strong><span className="text-xs text-[#64748B]">{student.email} · {student.className}</span></span>{selectedStudentId === student.student_id && <Check size={16} className="text-[#15803D]" />}</button>) : <p className="rounded-lg bg-slate-50 p-3 text-sm text-[#64748B]">{translate(language, "noStudentsInClass")}</p>}
+          </div>}
+          {recipientMode === "class" && <p className="mt-4 rounded-lg bg-[#DCFCE7] p-3 text-sm text-[#166534]">{translate(language, "allStudentsIn")} {classes.find((item) => item.class_id === selectedClassId)?.name ?? translate(language, "class")}.</p>}
+          <div className="mt-4 grid gap-4">
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">{translate(language, "title")}<input name="title" required placeholder={translate(language, "title")} className="rounded-lg border border-[#DDE8DF] px-3 py-2.5 font-normal outline-none focus:border-[#EAB308] focus:ring-2 focus:ring-[#FEF08A]" /></label>
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">{translate(language, "message")}<textarea name="message" required rows={4} placeholder={translate(language, "message")} className="resize-none rounded-lg border border-[#DDE8DF] px-3 py-2.5 font-normal outline-none focus:border-[#EAB308] focus:ring-2 focus:ring-[#FEF08A]" /></label>
+          </div>
+          {feedback && <p className={`mt-4 text-sm ${feedback.includes("successfully") ? "text-[#15803D]" : "text-rose-600"}`}>{feedback}</p>}
+          <button type="submit" disabled={saving || !classes.length || (recipientMode === "student" && selectedStudentId === null)} className="mt-5 rounded-xl bg-[#EAB308] px-5 py-2.5 text-sm font-bold text-[#422006] transition hover:bg-[#FACC15] disabled:opacity-50">{saving ? translate(language, "sending") : translate(language, "sendNotification")}</button>
+        </form>
+      </div>
+    </section>
   );
 }
 
@@ -2637,20 +3240,20 @@ function AdminReports({ students }: { students: AdminStudent[] }) {
   return (
     <section id="reports" className="space-y-7">
       <div>
-        <p className="text-sm text-[#475569]">Academic performance overview</p>
+        <p className="text-sm font-semibold text-[#15803D]">Academic performance overview</p>
         <h2 className="mt-1 text-2xl font-bold tracking-tight text-[#0F172A]">
           Reports
         </h2>
       </div>
 
       {classNames.length ? (
-        <div className="flex flex-wrap gap-1 rounded-lg bg-[#EFF6FF] p-1">
+        <div className="flex flex-wrap gap-1 rounded-lg bg-[#FEF9C3] p-1">
           {classNames.map((name) => (
             <button
               key={name}
               onClick={() => setSelectedClass(name)}
               className={`rounded-md px-4 py-2 text-xs font-bold ${normalizeClassLabel(selectedClass) === normalizeClassLabel(name)
-                ? "bg-white text-[#0052CC] shadow-sm"
+                ? "bg-white text-[#15803D] shadow-sm"
                 : "text-[#475569]"
                 }`}
             >
@@ -2669,22 +3272,25 @@ function AdminReports({ students }: { students: AdminStudent[] }) {
           label="Selected class"
           value={selectedClass || "-"}
           icon={BookOpen}
+          tone="yellow"
         />
         <Stat
           label="Students in class"
           value={String(classStudents.length)}
           icon={Users}
+          tone="green"
         />
         <Stat
           label="Class average"
           value={classAverage !== null ? classAverage.toFixed(2) : "-"}
           detail={loadingClass ? "Calculating..." : undefined}
           icon={BarChart3}
+          tone="green"
         />
       </div>
 
-      <div className="rounded-2xl border border-[#DBEAFE] bg-white">
-        <div className="border-b border-[#DBEAFE] p-5">
+      <div className="rounded-2xl border border-[#DDE8DF] bg-white shadow-[0_2px_12px_rgba(22,101,52,.05)]">
+        <div className="border-b border-[#E2E8F0] p-5">
           <h3 className="font-bold text-[#0F172A]">
             {selectedClass
               ? `${selectedClass} — Class Ranking`
@@ -2709,8 +3315,8 @@ function AdminReports({ students }: { students: AdminStudent[] }) {
                 >
                   <div
                     className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${index === 0
-                      ? "bg-[#0052CC] text-white"
-                      : "bg-[#EFF6FF] text-[#0052CC]"
+                      ? "bg-[#15803D] text-white"
+                      : "bg-[#DCFCE7] text-[#15803D]"
                       }`}
                   >
                     {index + 1}
@@ -2724,7 +3330,7 @@ function AdminReports({ students }: { students: AdminStudent[] }) {
                       {student.email}
                     </p>
                   </div>
-                  <span className="shrink-0 text-sm font-bold text-[#0052CC]">
+                  <span className="shrink-0 text-sm font-bold text-[#15803D]">
                     {entry?.loading
                       ? "..."
                       : average !== null
@@ -2734,7 +3340,7 @@ function AdminReports({ students }: { students: AdminStudent[] }) {
                   <button
                     onClick={() => openReport(student)}
                     disabled={!student.student_id}
-                    className="shrink-0 rounded-lg border border-[#DBEAFE] px-3 py-1.5 text-xs font-bold text-[#0052CC] transition hover:bg-[#EFF6FF] disabled:opacity-40"
+                    className="shrink-0 rounded-lg border border-[#FDE68A] bg-[#FEFCE8] px-3 py-1.5 text-xs font-bold text-[#A16207] transition hover:bg-[#FEF9C3] disabled:opacity-40"
                   >
                     Get Report
                   </button>
@@ -2761,6 +3367,7 @@ function AdminReports({ students }: { students: AdminStudent[] }) {
 }
 
 function DynamicStudentWorkspace({
+  active,
   profile,
   courses,
   exercises,
@@ -2768,6 +3375,7 @@ function DynamicStudentWorkspace({
   submissions,
   notifications,
 }: {
+  active: string;
   profile: ApiStudent;
   courses: Course[];
   exercises: Exercise[];
@@ -2777,6 +3385,9 @@ function DynamicStudentWorkspace({
 }) {
   const [tab, setTab] = useState("Courses");
   const [feedback, setFeedback] = useState("");
+  const [submittedExerciseIds, setSubmittedExerciseIds] = useState(
+    () => new Set(submissions.map((item) => item.exercise_id)),
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingExerciseId = useRef<number | null>(null);
   const chooseSubmissionFile = (exerciseId: number) => {
@@ -2799,8 +3410,68 @@ function DynamicStudentWorkspace({
       setFeedback(error instanceof Error ? error.message : "Submission failed.");
     }
   };
+
+  const removeSubmission = async (submission: Submission) => {
+    if (!window.confirm("Remove this submission? You can submit a new file afterward.")) return;
+    try {
+      await api.deleteStudentSubmission(submission.submission_id);
+      setSubmittedExerciseIds((current) => {
+        const next = new Set(current);
+        next.delete(submission.exercise_id);
+        return next;
+      });
+      setFeedback("Submission removed. You can submit a new file now.");
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Unable to remove submission.");
+    }
+  };
+
+  const handleStudentProfileSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    try {
+      await api.updateStudentProfile({
+        full_name: String(data.get("full_name") ?? ""),
+        email: String(data.get("email") ?? ""),
+        phone_number: String(data.get("phone_number") ?? ""),
+        ...(String(data.get("password") ?? "") ? { password: String(data.get("password")) } : {}),
+      });
+      setFeedback("Profile updated successfully.");
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Unable to update profile.");
+    }
+  };
+
+  if (active === "Profile") {
+    return (
+      <section className="max-w-3xl space-y-6 bg-[#F6F9FC] font-sans">
+        <div>
+          <p className="text-sm text-[#64748B]">Your account details</p>
+          <h2 className="mt-1 text-2xl font-bold text-[#0F172A]">Profile</h2>
+        </div>
+        <form id="student-profile-form" onSubmit={handleStudentProfileSubmit} className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-[0_2px_10px_rgba(15,23,42,.03)]">
+          <div className="mb-6 flex items-center gap-4 border-b border-slate-100 pb-5">
+            <Avatar initials={profile.full_name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()} className="h-12 w-12" />
+            <div><p className="font-bold text-[#0F172A]">{profile.full_name}</p><p className="text-sm text-[#64748B]">Student account · {profile.level ?? "No level"}</p></div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">Full name<input name="full_name" defaultValue={profile.full_name} required className="rounded-lg border border-[#E2E8F0] px-3 py-2.5 font-normal outline-none focus:border-[#1769E0]" /></label>
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">Email<input name="email" type="email" defaultValue={profile.email} required className="rounded-lg border border-[#E2E8F0] px-3 py-2.5 font-normal outline-none focus:border-[#1769E0]" /></label>
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">Phone number<input name="phone_number" defaultValue={profile.phone_number ?? ""} className="rounded-lg border border-[#E2E8F0] px-3 py-2.5 font-normal outline-none focus:border-[#1769E0]" /></label>
+            <div className="flex flex-col justify-end gap-1.5 rounded-lg border border-dashed border-[#E2E8F0] bg-slate-50 px-3 py-2.5">
+              <span className="text-sm font-semibold text-[#334155]">Academic level</span>
+              <span className="text-sm text-[#64748B]">{profile.level ?? "No academic level"}</span>
+            </div>
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155] sm:col-span-2">New password<input name="password" type="password" placeholder="Leave blank to keep current" className="rounded-lg border border-[#E2E8F0] px-3 py-2.5 font-normal outline-none focus:border-[#1769E0]" /></label>
+          </div>
+          {feedback && <p className={`mt-4 text-sm ${feedback.includes("successfully") ? "text-emerald-600" : "text-red-600"}`}>{feedback}</p>}
+          <button type="submit" className="mt-6 rounded-xl bg-[#1769E0] px-5 py-2.5 text-sm font-bold text-white">Save changes</button>
+        </form>
+      </section>
+    );
+  }
   return (
-    <section className="space-y-7">
+    <section className="space-y-7 font-sans">
       <input
         ref={fileInputRef}
         type="file"
@@ -2934,8 +3605,9 @@ function DynamicStudentWorkspace({
   );
 }
 
-function ClassicStudentWorkspace({
+function DynamicStudentWorkspaceLegacy({
   active,
+  setActive,
   profile,
   courses,
   exercises,
@@ -2944,6 +3616,7 @@ function ClassicStudentWorkspace({
   notifications,
 }: {
   active: string;
+  setActive: (value: string) => void;
   profile: ApiStudent;
   courses: Course[];
   exercises: Exercise[];
@@ -2952,9 +3625,389 @@ function ClassicStudentWorkspace({
   notifications: StudentNotification[];
 }) {
   const [feedback, setFeedback] = useState("");
+  const [profileImage, setProfileImage] = useState("");
+  const [submittedExerciseIds, setSubmittedExerciseIds] = useState(
+    () => new Set(submissions.map((item) => item.exercise_id)),
+  );
+
+  useEffect(() => {
+    setProfileImage(window.localStorage.getItem("eduinsight_student_profile_image") ?? "");
+  }, []);
+
+  const handleProfileImage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = String(reader.result);
+      setProfileImage(image);
+      window.localStorage.setItem("eduinsight_student_profile_image", image);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleStudentProfileSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    try {
+      await api.updateStudentProfile({
+        full_name: String(data.get("full_name") ?? ""),
+        email: String(data.get("email") ?? ""),
+        phone_number: String(data.get("phone_number") ?? ""),
+        ...(String(data.get("password") ?? "") ? { password: String(data.get("password")) } : {}),
+      });
+      setFeedback("Profile updated successfully.");
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Unable to update profile.");
+    }
+  };
+
+  if (active === "Profile") {
+    return (
+      <section className="max-w-3xl space-y-6 bg-[#F6F9FC] font-sans">
+        <div><p className="text-sm text-[#64748B]">Your account details</p><h2 className="mt-1 text-2xl font-bold text-[#0F172A]">Profile</h2></div>
+        <form id="student-profile-form" onSubmit={handleStudentProfileSubmit} className="rounded-2xl border border-[#E2E8F0] bg-white p-6">
+          <div className="mb-6 flex items-center gap-4 border-b border-slate-100 pb-5">
+            <Avatar initials={profile.full_name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()} image={profileImage} className="h-12 w-12" />
+            <div><p className="font-bold text-[#0F172A]">{profile.full_name}</p><p className="text-sm text-[#64748B]">Student account</p></div>
+          </div>
+          <label className="mb-6 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[#DBE2EA] px-3 py-2 text-xs font-semibold text-[#1769E0] hover:bg-blue-50">Add profile picture<input type="file" accept="image/*" onChange={handleProfileImage} className="hidden" /></label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">Full name<input name="full_name" defaultValue={profile.full_name} required className="rounded-lg border border-[#DBE2EA] px-3 py-2.5 font-normal outline-none focus:border-[#0052CC]" /></label>
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">Email<input name="email" type="email" defaultValue={profile.email} required className="rounded-lg border border-[#DBE2EA] px-3 py-2.5 font-normal outline-none focus:border-[#0052CC]" /></label>
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155]">Phone number<input name="phone_number" defaultValue={profile.phone_number ?? ""} className="rounded-lg border border-[#DBE2EA] px-3 py-2.5 font-normal outline-none focus:border-[#0052CC]" /></label>
+            <div className="flex flex-col justify-end gap-1.5 rounded-lg border border-dashed border-[#E2E8F0] bg-slate-50 px-3 py-2.5"><span className="text-sm font-semibold text-[#334155]">Academic level</span><span className="text-sm text-[#64748B]">{profile.level ?? "No academic level"}</span></div>
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#334155] sm:col-span-2">New password<input name="password" type="password" placeholder="Leave blank to keep current" className="rounded-lg border border-[#DBE2EA] px-3 py-2.5 font-normal outline-none focus:border-[#0052CC]" /></label>
+          </div>
+          {feedback && <p className={`mt-4 text-sm ${feedback.includes("successfully") ? "text-emerald-600" : "text-red-600"}`}>{feedback}</p>}
+          <button type="submit" className="mt-6 rounded-xl bg-[#0052CC] px-5 py-2.5 text-sm font-bold text-white">Save changes</button>
+        </form>
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-7 font-sans">
+      <div>
+        <p className="text-sm text-[#64748B]">Student workspace</p>
+        <h2 className="mt-1 text-2xl font-bold text-[#0F172A]">{profile.full_name}</h2>
+        <p className="mt-1 text-sm text-[#64748B]">{profile.email} · {profile.level ?? "No level"}</p>
+      </div>
+      {feedback && <p className="rounded-lg bg-blue-50 p-3 text-sm text-[#0052CC]">{feedback}</p>}
+      <div className="rounded-2xl border border-[#DBEAFE] bg-white p-5">
+        <p className="text-sm text-[#64748B]">This workspace is on the current student layout.</p>
+      </div>
+    </section>
+  );
+}
+
+function StudentFocusTimer() {
+  const duration = 25 * 60;
+  const [seconds, setSeconds] = useState(duration);
+  const [running, setRunning] = useState(false);
+
+  useEffect(() => {
+    if (!running) return;
+    const interval = window.setInterval(() => {
+      setSeconds((current) => {
+        if (current <= 1) {
+          setRunning(false);
+          return 0;
+        }
+        return current - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [running]);
+
+  const minutes = Math.floor(seconds / 60);
+  const remaining = seconds % 60;
+  const progress = ((duration - seconds) / duration) * 100;
+
+  return (
+    <section className="relative overflow-hidden rounded-2xl bg-[#2563EB] p-6 text-white shadow-[0_8px_24px_rgba(37,99,235,.2)]">
+      <div className="absolute -right-12 -top-12 size-40 rounded-full border border-white/15" />
+      <div className="absolute -bottom-20 right-16 size-48 rounded-full border border-white/10" />
+      <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-medium text-white/75">
+            <Timer size={16} /> Focus productivity
+          </div>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight">Make space to learn.</h2>
+          <p className="mt-1 max-w-md text-sm text-white/75">
+            A 25-minute study sprint for your next exercise.
+          </p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="relative flex h-28 w-28 shrink-0 items-center justify-center rounded-full border-4 border-white/20 bg-white/10">
+            <div
+              className="absolute inset-[-4px] rounded-full border-4 border-white border-b-transparent border-l-transparent"
+              style={{ transform: `rotate(${progress * 3.6 - 45}deg)` }}
+            />
+            <span className="font-mono text-2xl font-semibold tabular-nums">
+              {String(minutes).padStart(2, "0")}:{String(remaining).padStart(2, "0")}
+            </span>
+          </div>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => setRunning((value) => !value)}
+              className="flex min-w-24 items-center justify-center gap-2 rounded-xl bg-white px-3 py-2.5 text-xs font-bold text-[#1D4ED8] transition hover:bg-blue-50"
+            >
+              {running ? <Pause size={14} /> : <Play size={14} />}
+              {running ? "Pause" : "Start"}
+            </button>
+            <button
+              onClick={() => {
+                setRunning(false);
+                setSeconds(duration);
+              }}
+              className="flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-white transition hover:bg-white/10"
+            >
+              <RotateCcw size={14} /> Reset
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function StudentProgressWorkspace({
+  profile,
+  courses,
+  exercises,
+  grades,
+  submissions,
+  onSubmitExercise,
+}: {
+  profile: ApiStudent;
+  courses: Course[];
+  exercises: Exercise[];
+  grades: Grade[];
+  submissions: Submission[];
+  onSubmitExercise: (exerciseId: number) => void;
+}) {
+  const [selectedCourse, setSelectedCourse] = useState("All Courses");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
+  const [submittedExerciseIds, setSubmittedExerciseIds] = useState(
+    () => new Set(submissions.map((item) => item.exercise_id)),
+  );
+  const submittedIds = submittedExerciseIds;
+  const courseNames = Array.from(new Set(courses.map((course) => course.course_name)));
+
+  const filteredExercises = useMemo(() => exercises.filter((exercise) => {
+    const matchesCourse = selectedCourse === "All Courses" || exercise.course?.course_name === selectedCourse;
+    const query = searchQuery.toLowerCase();
+    return matchesCourse && (!query || exercise.exercise_name.toLowerCase().includes(query) || exercise.course?.course_name.toLowerCase().includes(query));
+  }), [exercises, searchQuery, selectedCourse]);
+
+  const gradedExercises = filteredExercises.filter((exercise) =>
+    grades.some((grade) => grade.exercise_id === exercise.exercise_id),
+  );
+  const scoreFor = (exerciseId: number) => grades.find((grade) => grade.exercise_id === exerciseId)?.score ?? 0;
+  const average = gradedExercises.length
+    ? gradedExercises.reduce((sum, exercise) => sum + scoreFor(exercise.exercise_id), 0) / gradedExercises.length
+    : 0;
+  const completionRate = filteredExercises.length
+    ? Math.round((filteredExercises.filter((exercise) => submittedIds.has(exercise.exercise_id)).length / filteredExercises.length) * 100)
+    : 0;
+  const highest = gradedExercises.reduce<Exercise | null>((best, exercise) =>
+    !best || scoreFor(exercise.exercise_id) > scoreFor(best.exercise_id) ? exercise : best, null);
+  const chartCourses = Array.from(new Set(filteredExercises.map((exercise) => exercise.course?.course_name ?? "Course")));
+  const chartColors = ["#16A34A", "#FACC15", "#F97316", "#DC2626", "#2563EB", "#D4A017"];
+  const exercisesByCourse = chartCourses.map((courseName) => ({
+    courseName,
+    exercises: filteredExercises.filter((exercise) => (exercise.course?.course_name ?? "Course") === courseName),
+  }));
+  const lineChartLength = Math.max(...exercisesByCourse.map((course) => course.exercises.length), 0);
+  const lineChartData = Array.from({ length: lineChartLength }, (_, index) => {
+    const point: Record<string, string | number | null> = { name: `ex${index + 1}` };
+    exercisesByCourse.forEach(({ courseName, exercises: courseExercises }) => {
+      const exercise = courseExercises[index];
+      point[courseName] = exercise
+        ? grades.find((grade) => grade.exercise_id === exercise.exercise_id)?.score ?? null
+        : null;
+    });
+    return point;
+  });
+
+  return (
+    <section className="space-y-7">
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-[#64748B]">Student workspace</p>
+          <h2 className="mt-1 text-2xl font-black tracking-tight text-[#07152F]">Academic Progress &amp; Performance</h2>
+          <p className="mt-1 text-sm text-[#64748B]">Review your scores, submissions, and feedback in one place.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" size={15} />
+            <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search exercise..." className="w-52 rounded-xl border border-[#DBEAFE] bg-white py-2.5 pl-9 pr-3 text-xs outline-none focus:border-[#1769E0] focus:ring-2 focus:ring-[#BFDBFE]" />
+          </div>
+          <div className="flex items-center gap-2 rounded-xl border border-[#DBEAFE] bg-white px-3">
+            <Filter size={14} className="text-[#94A3B8]" />
+            <select value={selectedCourse} onChange={(event) => setSelectedCourse(event.target.value)} className="bg-transparent py-2.5 text-xs font-bold text-[#334155] outline-none">
+              <option>All Courses</option>
+              {courseNames.map((name) => <option key={name}>{name}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <ProgressMetric label="Overall average" value={`${average.toFixed(1)} / 20`} detail={`${Math.round((average / 20) * 100)}% target progress`} icon={BarChart3} tone="blue" />
+        <ProgressMetric label="Completed exercises" value={`${filteredExercises.filter((exercise) => submittedIds.has(exercise.exercise_id)).length} / ${filteredExercises.length}`} detail={`${completionRate}% submission rate`} icon={CheckCircle2} tone="green" />
+        <ProgressMetric label="Highest score" value={highest ? `${scoreFor(highest.exercise_id)} / 20` : "N/A"} detail={highest?.exercise_name ?? "No graded exercise yet"} icon={Award} tone="amber" />
+        <ProgressMetric label="Study status" value="Active student" detail={`${profile.full_name} · consistent progress`} icon={Target} tone="purple" />
+      </div>
+
+      <section className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_2px_10px_rgba(15,23,42,.03)] sm:p-6">
+        <div className="flex flex-col justify-between gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center">
+          <div>
+            <div className="flex flex-wrap items-center gap-2"><h3 className="text-lg font-black text-[#0F172A]">Exercise score progression</h3><span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-[#1769E0]">Scale 0 - 20</span></div>
+            <p className="mt-1 text-xs text-[#64748B]">Your performance for {selectedCourse === "All Courses" ? "all courses" : selectedCourse} against the 10/20 target.</p>
+          </div>
+        </div>
+        {filteredExercises.length ? (
+          <div className="mt-6 h-72 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={lineChartData} margin={{ top: 12, right: 18, left: 0, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                <XAxis dataKey="name" tick={{ fill: "#64748B", fontSize: 11, fontFamily: "var(--font-inter)" }} axisLine={{ stroke: "#CBD5E1" }} />
+                <YAxis domain={[0, 20]} ticks={[0, 5, 10, 15, 20]} tick={{ fill: "#64748B", fontSize: 11, fontFamily: "var(--font-inter)" }} axisLine={{ stroke: "#CBD5E1" }} />
+                <Tooltip contentStyle={{ borderRadius: 10, borderColor: "#DBEAFE", fontSize: 12, fontFamily: "var(--font-inter)" }} />
+                <ReferenceLine y={10} stroke="#F59E0B" strokeDasharray="5 5" label={{ value: "Target: 10 / 20", fill: "#92400E", fontSize: 11, fontFamily: "var(--font-inter)", position: "insideTopLeft" }} />
+                <Legend wrapperStyle={{ fontSize: 12, paddingTop: 10, fontFamily: "var(--font-inter)" }} />
+                {chartCourses.map((courseName, index) => (
+                  <Line key={courseName} type="monotone" dataKey={courseName} name={courseName} stroke={chartColors[index % chartColors.length]} strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} connectNulls />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        ) : <p className="py-16 text-center text-sm text-[#64748B]">No exercises match your filters.</p>}
+        <div className="mt-4 flex flex-wrap gap-4 border-t border-slate-100 pt-4 text-xs font-semibold text-[#64748B]"><span><i className="mr-1 inline-block h-3 w-3 rounded bg-[#1769E0]" />Graded</span><span><i className="mr-1 inline-block h-3 w-3 rounded bg-[#10B981]" />Top score</span><span><i className="mr-1 inline-block h-3 w-3 rounded bg-[#FCD34D]" />Pending submission</span></div>
+      </section>
+
+      <section className="overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white shadow-[0_2px_10px_rgba(15,23,42,.03)]">
+        <div className="flex flex-col justify-between gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:p-6"><div><h3 className="text-lg font-black text-[#0F172A]">Exercise submissions &amp; grades</h3><p className="mt-1 text-xs text-[#64748B]">Detailed scores and submission status for your selected view.</p></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-[#475569]">{filteredExercises.length} exercises</span></div>
+        <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left"><thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-[#64748B]"><tr><th className="px-5 py-3">Exercise</th><th className="px-5 py-3">Course</th><th className="px-5 py-3">Score</th><th className="px-5 py-3">Status</th><th className="px-5 py-3 text-right">Actions</th></tr></thead><tbody className="divide-y divide-slate-100">{filteredExercises.map((exercise) => { const submitted = submittedIds.has(exercise.exercise_id); const score = scoreFor(exercise.exercise_id); return <tr key={exercise.exercise_id} className="transition hover:bg-blue-50/30"><td className="px-5 py-4"><div className="flex items-center gap-3"><span className={`flex h-9 w-9 items-center justify-center rounded-lg ${submitted ? "bg-blue-50 text-[#1769E0]" : "bg-amber-50 text-[#D97706]"}`}><FileText size={15} /></span><span className="text-sm font-bold text-[#0F172A]">{exercise.exercise_name}</span></div></td><td className="px-5 py-4"><span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-bold text-[#1769E0]">{exercise.course?.course_name ?? "Course"}</span></td><td className="px-5 py-4 text-sm font-bold text-[#1769E0]">{submitted ? `${score} / 20` : "-"}</td><td className="px-5 py-4"><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${submitted ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{submitted ? "Submitted" : "Pending"}</span></td><td className="px-5 py-4 text-right"><div className="flex justify-end gap-2"><button onClick={() => setSelectedExercise(exercise)} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-[#1769E0]">View details</button>{!submitted && <button onClick={() => onSubmitExercise(exercise.exercise_id)} className="rounded-lg bg-[#F59E0B] px-3 py-1.5 text-xs font-bold text-white">Submit</button>}</div></td></tr>; })}</tbody></table></div>
+      </section>
+
+      {selectedExercise && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setSelectedExercise(null)}><div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}><div className="bg-[#1769E0] p-5 text-white"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-wider text-blue-100">Exercise details</p><h3 className="mt-1 text-xl font-black">{selectedExercise.exercise_name}</h3><p className="mt-1 text-xs text-blue-100">{selectedExercise.course?.course_name ?? "Course"}</p></div><button onClick={() => setSelectedExercise(null)}><X size={18} /></button></div></div><div className="space-y-4 p-5"><div className="flex items-center justify-between rounded-xl bg-slate-50 p-4"><span className="text-xs font-bold uppercase text-[#64748B]">Current score</span><strong className="text-2xl text-[#1769E0]">{submittedIds.has(selectedExercise.exercise_id) ? `${scoreFor(selectedExercise.exercise_id)} / 20` : "Pending"}</strong></div><p className="text-sm leading-6 text-[#475569]">{submittedIds.has(selectedExercise.exercise_id) ? "Your submission has been recorded. Review the course material and keep building on this result." : "This exercise is ready for submission. Upload your work from the course workspace."}</p>{!submittedIds.has(selectedExercise.exercise_id) && <button onClick={() => { setSelectedExercise(null); onSubmitExercise(selectedExercise.exercise_id); }} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#F59E0B] py-3 text-sm font-bold text-white"><Send size={15} /> Submit exercise</button>}</div></div></div>}
+    </section>
+  );
+}
+
+function ProgressMetric({ label, value, detail, icon: Icon, tone }: { label: string; value: string; detail: string; icon: typeof BarChart3; tone: "blue" | "green" | "amber" | "purple" }) {
+  const styles = { blue: "bg-blue-50 text-[#1769E0]", green: "bg-emerald-50 text-[#10B981]", amber: "bg-amber-50 text-[#F59E0B]", purple: "bg-violet-50 text-violet-600" };
+  return <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_2px_10px_rgba(15,23,42,.03)]"><div className="flex items-start justify-between gap-2"><span className="text-[10px] font-extrabold uppercase tracking-wider text-[#94A3B8]">{label}</span><span className={`flex h-8 w-8 items-center justify-center rounded-xl ${styles[tone]}`}><Icon size={15} /></span></div><p className="mt-3 truncate text-2xl font-black tracking-tight text-[#0F172A]">{value}</p><p className="mt-1 truncate text-xs font-medium text-[#64748B]">{detail}</p></div>;
+}
+
+function ClassicStudentWorkspace({
+  active,
+  setActive,
+  profile,
+  courses,
+  exercises,
+  grades,
+  submissions,
+  notifications,
+}: {
+  active: string;
+  setActive: (value: string) => void;
+  profile: ApiStudent;
+  courses: Course[];
+  exercises: Exercise[];
+  grades: Grade[];
+  submissions: Submission[];
+  notifications: StudentNotification[];
+}) {
+  const [feedback, setFeedback] = useState("");
+  const [profileTab, setProfileTab] = useState<"personal" | "academic" | "security" | "notifications">("personal");
+  const [emailAlerts, setEmailAlerts] = useState(true);
+  const [smsAlerts, setSmsAlerts] = useState(false);
+  const [profileImage, setProfileImage] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingExerciseId = useRef<number | null>(null);
-  const submittedIds = new Set(submissions.map((item) => item.exercise_id));
+  const pendingSubmissionId = useRef<number | null>(null);
+  const [submittedExerciseIds, setSubmittedExerciseIds] = useState(
+    () => new Set(submissions.map((item) => item.exercise_id)),
+  );
+  const submittedIds = submittedExerciseIds;
+  useEffect(() => {
+    setProfileImage(window.localStorage.getItem("eduinsight_student_profile_image") ?? "");
+  }, []);
+
+  const handleProfileImage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = String(reader.result);
+      setProfileImage(image);
+      window.localStorage.setItem("eduinsight_student_profile_image", image);
+    };
+    reader.readAsDataURL(file);
+  };
+  const removeSubmission = async (submission: Submission) => {
+    if (!window.confirm("Remove this submission? You can submit a new file afterward.")) return;
+    try {
+      await api.deleteStudentSubmission(submission.submission_id);
+      setSubmittedExerciseIds((current) => {
+        const next = new Set(current);
+        next.delete(submission.exercise_id);
+        return next;
+      });
+      setFeedback("Submission removed. You can submit a new file now.");
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Unable to remove submission.");
+    }
+  };
+  const handleStudentProfileSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    try {
+      await api.updateStudentProfile({
+        full_name: String(data.get("full_name") ?? ""),
+        email: String(data.get("email") ?? ""),
+        phone_number: String(data.get("phone_number") ?? ""),
+        ...(String(data.get("password") ?? "") ? { password: String(data.get("password")) } : {}),
+      });
+      setFeedback("Profile updated successfully.");
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Unable to update profile.");
+    }
+  };
+
+  if (active === "Profile") {
+    return (
+      <section className="max-w-3xl space-y-6 bg-[#F6F9FC] font-sans">
+        <div><p className="text-sm text-[#64748B]">Your account details</p><h2 className="mt-1 text-2xl font-bold text-[#0F172A]">Profile</h2></div>
+        <div className="rounded-2xl border border-[#E2E8F0] bg-white p-6">
+          <div className="flex flex-wrap items-center justify-between gap-5">
+            <div className="flex items-center gap-4">
+              <Avatar initials={profile.full_name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()} className="h-16 w-16 text-lg" />
+              <div><h3 className="text-xl font-bold text-[#0F172A]">{profile.full_name}</h3><p className="mt-1 text-sm text-[#64748B]">Student account · {profile.email}</p><p className="mt-1 text-xs text-[#64748B]">{profile.level ?? "No academic level"} · <span className="font-semibold text-emerald-600">Active account</span></p></div>
+            </div>
+            <button type="submit" form="student-profile-form" className="rounded-xl bg-[#1769E0] px-5 py-2.5 text-sm font-bold text-white">Save Changes</button>
+          </div>
+        </div>
+        <form id="student-profile-form" onSubmit={handleStudentProfileSubmit} className="rounded-2xl border border-[#E2E8F0] bg-white p-6">
+          <h3 className="text-lg font-bold text-[#0F172A]">Personal Information</h3><div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <label className="text-sm font-semibold text-[#0F172A]">Email<input name="email" type="email" defaultValue={profile.email} required className="mt-1.5 w-full rounded-lg border border-[#E2E8F0] px-3 py-2.5 font-normal outline-none focus:border-[#1769E0]" /></label>
+              <label className="text-sm font-semibold text-[#0F172A]">Phone<input name="phone_number" defaultValue={profile.phone_number ?? ""} className="mt-1.5 w-full rounded-lg border border-[#E2E8F0] px-3 py-2.5 font-normal outline-none focus:border-[#1769E0]" /></label>
+              <div className="rounded-lg border border-dashed border-[#E2E8F0] bg-slate-50 px-3 py-2.5">
+                <span className="text-sm font-semibold text-[#0F172A]">Academic level</span>
+                <p className="mt-1 text-sm text-[#64748B]">{profile.level ?? "No academic level"}</p>
+              </div>
+              <label className="text-sm font-semibold text-[#0F172A] sm:col-span-2">New password<input name="password" type="password" placeholder="Leave blank to keep current" className="mt-1.5 w-full rounded-lg border border-[#E2E8F0] px-3 py-2.5 font-normal outline-none focus:border-[#1769E0]" /></label>
+          </div>{feedback && <p className="mt-4 text-sm text-emerald-600">{feedback}</p>}
+          <button type="submit" className="mt-6 rounded-xl bg-[#1769E0] px-5 py-2.5 text-sm font-bold text-white">Save changes</button>
+        </form>
+      </section>
+    );
+  }
   const average = grades.length
     ? grades.reduce((sum, item) => sum + item.score, 0) / grades.length
     : 0;
@@ -2976,8 +4029,27 @@ function ClassicStudentWorkspace({
   const privateFeedback = notifications.filter((item) =>
     item.title.toLowerCase().includes("feedback"),
   );
-  const submitExercise = (exerciseId: number) => {
+  const pendingExercises = exercises.filter(
+    (exercise) => !submittedIds.has(exercise.exercise_id),
+  );
+  const recentActivity = [
+    ...grades.map((grade) => ({
+      icon: CheckCircle2,
+      title: `Exercise ${grade.exercise_id} was graded`,
+      detail: `${grade.score} points · Recent result`,
+      tone: "bg-emerald-50 text-emerald-600",
+    })),
+    ...notifications.slice(0, 2).map((item) => ({
+      icon: Bell,
+      title: item.title,
+      detail: item.message,
+      tone: "bg-blue-50 text-[#0052CC]",
+    })),
+  ].slice(0, 4);
+  const submitExercise = (exerciseId: number, submissionId: number | null = null) => {
     pendingExerciseId.current = exerciseId;
+    pendingSubmissionId.current = submissionId;
+    setFeedback("Choose your exercise file to submit.");
     fileInputRef.current?.click();
   };
   const handleSubmissionFile = async (
@@ -2985,112 +4057,288 @@ function ClassicStudentWorkspace({
   ) => {
     const file = event.target.files?.[0];
     const exerciseId = pendingExerciseId.current;
+    const submissionId = pendingSubmissionId.current;
     event.target.value = "";
     pendingExerciseId.current = null;
+    pendingSubmissionId.current = null;
     if (!file || exerciseId === null) return;
 
     try {
-      await api.createSubmission({ exercise_id: exerciseId, file });
-      setFeedback("Exercise submitted successfully.");
+      if (submissionId !== null) {
+        await api.replaceStudentSubmission(submissionId, file);
+        setFeedback("Submission updated successfully.");
+      } else {
+        await api.createSubmission({ exercise_id: exerciseId, file });
+        setSubmittedExerciseIds((current) => new Set(current).add(exerciseId));
+        setFeedback("Exercise submitted successfully.");
+      }
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Submission failed.");
     }
   };
 
-  if (active === "Progress")
+  if (active === "Notifications") {
     return (
       <section className="space-y-6">
         <div>
-          <p className="text-sm text-[#64748B]">Student workspace</p>
-          <h2 className="mt-1 text-2xl font-bold text-[#0F172A]">Progress</h2>
+          <p className="text-sm text-[#64748B]">Updates from your teachers and administrator</p>
+          <h2 className="mt-1 text-2xl font-bold text-[#07152F]">Notifications</h2>
         </div>
-        <div className="rounded-2xl border border-[#DBEAFE] bg-white p-5">
-          <div className="h-[320px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                <YAxis domain={[0, 20]} tick={{ fontSize: 11 }} />
-                <Tooltip />
-                <Bar dataKey="score" fill="#0052CC" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+        <section className="overflow-hidden rounded-2xl border border-[#FDE68A] bg-[#FFFBEB]">
+          <div className="flex items-center justify-between gap-3 border-b border-[#FDE68A] px-5 py-4">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FEF3C7] text-[#D97706]"><Bell size={19} /></span>
+              <h3 className="font-bold text-[#7C2D12]">Teacher updates</h3>
+            </div>
+            <span className="rounded-full bg-[#FEF3C7] px-2.5 py-1 text-xs font-bold text-[#92400E]">{notifications.length} / 3 max</span>
           </div>
-          {!chartData.length && (
-            <p className="text-sm text-[#64748B]">
-              No grades or exercises available.
-            </p>
-          )}
-        </div>
+          <div className="space-y-3 p-5">
+            {notifications.length ? notifications.slice(0, 3).map((notification) => (
+              <article key={notification.notification_id} className="rounded-xl border border-[#FDE68A] bg-white p-4">
+                <div className="flex items-start gap-3">
+                  <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#F59E0B]" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h4 className="font-bold text-[#7C2D12]">{notification.title}</h4>
+                      {notification.created_at && <time className="text-[11px] text-[#94A3B8]">{new Date(notification.created_at).toLocaleString()}</time>}
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-[#9A3412]">{notification.message}</p>
+                    <button type="button" className="mt-3 text-xs font-semibold text-emerald-700">✓ Mark read</button>
+                  </div>
+                </div>
+              </article>
+            )) : <p className="py-10 text-center text-sm text-[#9A3412]">No new messages from your teachers or administrator.</p>}
+          </div>
+          <p className="border-t border-[#FDE68A] px-5 py-3 text-center text-xs text-[#A16207]">Showing the latest 3 teacher updates.</p>
+        </section>
       </section>
+    );
+  }
+
+  if (active === "Progress")
+    return (
+      <StudentProgressWorkspace
+        profile={profile}
+        courses={courses}
+        exercises={exercises}
+        grades={grades}
+        submissions={submissions}
+        onSubmitExercise={submitExercise}
+      />
     );
   if (active === "My Courses")
     return (
-      <section className="space-y-5">
-        <h2 className="text-2xl font-bold text-[#0F172A]">My Courses</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {courses.length ? (
-            courses.map((course) => (
-              <div
-                key={course.course_id}
-                className="rounded-2xl border border-[#DBEAFE] bg-white p-5"
-              >
-                <h3 className="font-bold text-[#0F172A]">
-                  {course.course_name}
-                </h3>
-                <p className="mt-1 text-xs text-[#64748B]">
-                  {course.teacher?.full_name ?? ""} · {course.level ?? ""}
-                </p>
-                <div className="mt-4 flex items-center justify-between gap-3">
-                  <p className="text-sm text-[#475569]">
-                    {exercises.filter(
-                      (item) => item.course?.course_id === course.course_id,
-                    ).length}{" "}
-                    exercises
-                  </p>
-                  {course.material_file_path && (
-                    <a
-                      href={getFileUrl(course.material_file_path)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs font-bold text-[#0052CC] hover:underline"
-                    >
-                      View course material
-                    </a>
-                  )}
-                </div>
-                <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
-                  {exercises
-                    .filter(
-                      (item) => item.course?.course_id === course.course_id,
-                    )
-                    .map((exercise) => (
-                      <div
-                        key={exercise.exercise_id}
-                        className="flex items-center justify-between gap-3 text-sm"
-                      >
-                        <span className="text-slate-700">
-                          {exercise.exercise_name}
-                        </span>
-                        {exercise.material_file_path && (
-                          <a
-                            href={getFileUrl(exercise.material_file_path)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs font-semibold text-[#0052CC] hover:underline"
-                          >
-                            View exercise file
-                          </a>
-                        )}
-                      </div>
-                    ))}
-                </div>
-              </div>
-            ))
-          ) : (
-            <p className="text-sm text-[#64748B]">No courses enrolled.</p>
-          )}
+      <section className="space-y-6">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/pdf,image/jpeg,image/png"
+          className="hidden"
+          onChange={handleSubmissionFile}
+        />
+        <div>
+          <p className="text-sm text-[#64748B]">Student workspace</p>
+          <h2 className="mt-1 text-2xl font-bold tracking-tight text-[#0F172A]">My Courses</h2>
+          <p className="mt-2 text-sm text-[#526681]">
+            {courses.length} course{courses.length === 1 ? "" : "s"} enrolled this semester.
+          </p>
         </div>
+        {feedback && (
+          <p className={`rounded-lg p-3 text-sm ${feedback.includes("successfully") ? "bg-emerald-50 text-emerald-700" : feedback.includes("failed") ? "bg-rose-50 text-rose-700" : "bg-blue-50 text-[#0052CC]"}`}>
+            {feedback}
+          </p>
+        )}
+
+        {courses.length ? (
+          <div className="grid gap-5 md:grid-cols-2">
+            {courses.map((course) => {
+              const courseExercises = exercises.filter(
+                (item) => item.course?.course_id === course.course_id,
+              );
+              const courseMaterialPath = course.material_file_path ?? courseExercises.find(
+                (item) => item.material_file_path,
+              )?.material_file_path;
+              const courseGrades = grades.filter((grade) =>
+                courseExercises.some((item) => item.exercise_id === grade.exercise_id),
+              );
+              const completed = courseExercises.filter((exercise) =>
+                submittedIds.has(exercise.exercise_id),
+              ).length;
+              const completion = courseExercises.length
+                ? Math.round((completed / courseExercises.length) * 100)
+                : 0;
+              const averageScore = courseGrades.length
+                ? courseGrades.reduce((sum, grade) => sum + grade.score, 0) / courseGrades.length
+                : null;
+              const scorePercent = averageScore === null
+                ? 0
+                : Math.min(100, Math.round((averageScore / 20) * 100));
+              const performance = averageScore === null
+                ? "No grades yet"
+                : averageScore >= 15
+                  ? "Good performance"
+                  : averageScore >= 10
+                    ? "Needs attention"
+                    : "Keep practicing";
+              const performanceColor = averageScore === null
+                ? "text-[#64748B]"
+                : averageScore >= 15
+                  ? "text-[#16A34A]"
+                  : averageScore >= 10
+                    ? "text-[#F59E0B]"
+                    : "text-[#DC2626]";
+
+              return (
+                <article
+                  key={course.course_id}
+                  className="group rounded-2xl border border-[#D8E1EA] bg-white p-6 shadow-[0_2px_10px_rgba(15,23,42,.03)] transition hover:-translate-y-0.5 hover:border-[#BFDBFE] hover:shadow-[0_8px_24px_rgba(37,99,235,.09)]"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#EAF2FF] text-[#1769E0]">
+                      <BookOpen size={25} strokeWidth={1.8} />
+                    </div>
+                    <span className="rounded-full bg-[#EAF2FF] px-3 py-1 text-xs font-semibold text-[#1E3A8A]">
+                      {course.semester ?? "Current term"}
+                    </span>
+                  </div>
+
+                  <h3 className="mt-5 text-xl font-bold tracking-tight text-[#07152F]">
+                    {course.course_name}
+                  </h3>
+                  <p className="mt-1 text-sm text-[#526681]">
+                    {course.teacher?.full_name ?? "Course instructor"}
+                  </p>
+
+                  <div className="mt-6 space-y-4">
+                    <div>
+                      <div className="flex items-center justify-between gap-3 text-sm">
+                        <span className="text-[#526681]">Average score</span>
+                        <strong className={performanceColor}>
+                          {averageScore === null ? "-" : `${averageScore.toFixed(1)} / 20`}
+                        </strong>
+                      </div>
+                      <div className="mt-2 h-3 overflow-hidden rounded-full bg-[#EDF2F7]">
+                        <div
+                          className={`h-full rounded-full transition-all ${averageScore !== null && averageScore >= 15 ? "bg-[#16A34A]" : averageScore !== null && averageScore >= 10 ? "bg-[#F59E0B]" : "bg-[#2563EB]"}`}
+                          style={{ width: `${scorePercent}%` }}
+                        />
+                      </div>
+                      <p className={`mt-2 text-xs font-medium ${performanceColor}`}>{performance}</p>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between gap-3 text-sm">
+                        <span className="text-[#526681]">Exercises completed</span>
+                        <strong className="text-[#07152F]">{completed}/{courseExercises.length}</strong>
+                      </div>
+                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#EDF2F7]">
+                        <div className="h-full rounded-full bg-[#2563EB]" style={{ width: `${completion}%` }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 rounded-xl bg-[#F7F9FC] px-4 py-3 text-sm text-[#526681]">
+                    {averageScore !== null && averageScore >= 15
+                      ? "Good performance. You are progressing well."
+                      : averageScore !== null
+                        ? "Review recent exercises and focus on your weaker topics."
+                        : "Complete an exercise to start building your course progress."}
+                  </div>
+
+                  <div className="mt-5 rounded-xl border border-[#FDE68A] bg-[#FFFBEB] p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <h4 className="text-sm font-bold text-[#07152F]">Course exercises</h4>
+                        <p className="mt-0.5 text-[11px] text-[#64748B]">Assignments and submission status</p>
+                      </div>
+                      <span className="rounded-full bg-[#FEF3C7] px-2.5 py-1 text-[11px] font-bold text-[#92400E]">{completed}/{courseExercises.length} complete</span>
+                    </div>
+                    {courseExercises.length ? (
+                      <div className="space-y-2.5">
+                        {courseExercises.map((exercise) => {
+                          const isSubmitted = submittedIds.has(exercise.exercise_id);
+                          const submission = submissions.find((item) => item.exercise_id === exercise.exercise_id);
+                          return (
+                            <div key={exercise.exercise_id} className="flex items-center gap-2 rounded-lg border border-[#E1EAF5] bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,.03)]">
+                              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${isSubmitted ? "bg-[#DCFCE7] text-[#16A34A]" : "bg-[#EAF2FF] text-[#1769E0]"}`}>
+                                {isSubmitted ? <Check size={13} /> : <Pencil size={13} />}
+                              </span>
+                              <span className="min-w-0 flex-1 truncate text-xs font-medium text-[#334155]">{exercise.exercise_name}</span>
+                              {exercise.material_file_path && (
+                                <a
+                                  href={getFileUrl(exercise.material_file_path)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="shrink-0 text-[11px] font-semibold text-[#1769E0] hover:underline"
+                                >
+                                  View file
+                                </a>
+                              )}
+                              {isSubmitted ? (
+                                <div className="flex shrink-0 items-center gap-2">
+                                  <span className="text-[11px] font-semibold text-[#16A34A]">Submitted</span>
+                                  {submission && (
+                                    <>
+                                      <button
+                                        onClick={() => submitExercise(exercise.exercise_id, submission.submission_id)}
+                                        className="rounded-md bg-[#EAF2FF] px-2 py-1 text-[11px] font-bold text-[#1769E0] hover:bg-[#DBEAFE]"
+                                      >
+                                        Replace
+                                      </button>
+                                      <button
+                                        onClick={() => removeSubmission(submission)}
+                                        className="rounded-md bg-rose-50 px-2 py-1 text-[11px] font-bold text-rose-600 hover:bg-rose-100"
+                                      >
+                                        Remove
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => submitExercise(exercise.exercise_id)}
+                                  className="shrink-0 rounded-md bg-[#EAF2FF] px-2 py-1 text-[11px] font-bold text-[#1769E0] hover:bg-[#DBEAFE]"
+                                >
+                                  Submit
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-[#C8D8E8] bg-white px-3 py-3 text-xs text-[#64748B]">No exercises published for this course yet.</div>
+                    )}
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap items-center gap-2 border-t-2 border-[#EAF2FF] pt-4">
+                    {courseMaterialPath ? (
+                      <a
+                        href={getFileUrl(courseMaterialPath)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 rounded-xl bg-[#1769E0] px-3.5 py-2.5 text-xs font-bold text-white transition hover:bg-[#1257BD]"
+                      >
+                        <FileText size={15} /> View course material
+                      </a>
+                    ) : (
+                      <span className="inline-flex items-center gap-2 rounded-xl bg-[#F1F5F9] px-3.5 py-2.5 text-xs font-semibold text-[#64748B]">
+                        <FileText size={15} /> Course material not available
+                      </span>
+                    )}
+                    <span className="ml-auto text-xs text-[#64748B]">
+                      {courseExercises.length} exercise{courseExercises.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-[#DBEAFE] bg-white p-8 text-center text-sm text-[#64748B]">
+            No courses enrolled yet.
+          </div>
+        )}
       </section>
     );
   return (
@@ -3102,17 +4350,22 @@ function ClassicStudentWorkspace({
         className="hidden"
         onChange={handleSubmissionFile}
       />
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-sm text-[#64748B]">Active classroom</p>
-          <h2 className="mt-1 text-2xl font-bold text-[#0F172A]">
-            {profile.full_name}
+      <section className="relative overflow-hidden rounded-2xl border border-[#BFEEDB] bg-gradient-to-br from-[#E8FBF1] via-[#F0FAFF] to-white p-6 sm:p-8">
+        <div className="absolute -right-12 -top-20 h-48 w-48 rounded-full bg-[#DDF4FF] opacity-70" />
+        <div className="relative max-w-2xl">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#A7E8D1] bg-[#D9F8EB] px-3 py-1 text-xs font-bold text-[#087F5B]">
+            <span className="h-2 w-2 rounded-full bg-[#10B981]" /> Active semester 2026 · Spring term
+          </div>
+          <h2 className="mt-4 text-3xl font-bold tracking-tight text-[#07152F] sm:text-4xl">
+            Welcome back, {profile.full_name.split(" ")[0]}! <span aria-hidden="true">👋</span>
           </h2>
-          <p className="mt-1 text-sm text-[#64748B]">
-            {profile.email} · {profile.level ?? "No level"}
+          <p className="mt-2 max-w-xl text-sm leading-6 text-[#3F5875] sm:text-base">
+            Ready to continue your learning journey and make progress today?
           </p>
         </div>
-      </div>
+      </section>
+
+      <StudentFocusTimer />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Stat
           label="Average score"
@@ -3135,121 +4388,62 @@ function ClassicStudentWorkspace({
           {feedback}
         </p>
       )}
+      <div className="grid gap-6 lg:grid-cols-5">
+        <section id="my-courses" className="rounded-2xl border border-[#DBEAFE] bg-white lg:col-span-3">
+          <div className="flex items-center justify-between border-b border-[#DBEAFE] px-5 py-4">
+            <h2 className="font-bold text-[#0F172A]">Exercises to submit</h2>
+            <button onClick={() => document.getElementById("my-courses")?.scrollIntoView({ behavior: "smooth" })} className="text-xs font-bold text-[#0052CC]">View all</button>
+          </div>
+          <div className="divide-y divide-slate-100 px-5">
+            {pendingExercises.length ? pendingExercises.map((exercise) => (
+              <div key={exercise.exercise_id} className="flex items-center gap-3 py-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#EFF6FF] text-[#0052CC]"><Pencil size={15} /></span>
+                <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-[#0F172A]">{exercise.exercise_name}</p><p className="text-xs text-[#64748B]">Ready for submission</p></div>
+                <button onClick={() => submitExercise(exercise.exercise_id)} className="rounded-lg bg-[#EFF6FF] px-3 py-1.5 text-xs font-bold text-[#0052CC] hover:bg-[#DBEAFE]">Submit</button>
+              </div>
+            )) : <p className="py-6 text-center text-sm text-[#64748B]">You&apos;re all caught up.</p>}
+          </div>
+        </section>
+        <section className="rounded-2xl border border-[#DBEAFE] bg-white lg:col-span-2">
+          <div className="flex items-center justify-between border-b border-[#DBEAFE] px-5 py-4">
+            <h2 className="font-bold text-[#0F172A]">Recent grades</h2>
+            <button onClick={() => setFeedback("Your grades are shown in the Progress section.")} className="text-xs font-bold text-[#0052CC]">View all</button>
+          </div>
+          <div className="space-y-3 p-5">
+            {grades.length ? grades.slice(0, 4).map((grade) => (
+              <div key={`${grade.exercise_id}-${grade.grade_id ?? grade.score}`} className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#EFF6FF] text-[#0052CC]"><ClipboardCheck size={15} /></span><p className="truncate text-sm font-semibold text-[#0F172A]">Exercise {grade.exercise_id}</p></div>
+                <span className="text-sm font-bold text-[#0052CC]">{grade.score}<span className="font-normal text-[#64748B]"> / 20</span></span>
+              </div>
+            )) : <p className="py-6 text-center text-sm text-[#64748B]">No grades yet.</p>}
+          </div>
+        </section>
+      </div>
       <div className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">
         <section className="rounded-2xl border border-[#DBEAFE] bg-white">
           <div className="border-b border-[#DBEAFE] px-5 py-4">
-            <h2 className="font-bold text-[#0F172A]">Learning path</h2>
-            <p className="mt-1 text-xs text-[#475569]">
-              Courses and exercises for your class
-            </p>
+            <h2 className="font-bold text-[#0F172A]">Recent activity</h2>
+            <p className="mt-1 text-xs text-[#475569]">Your latest learning updates</p>
           </div>
-          <div className="space-y-3 p-5">
-            {courses.length ? (
-              courses.map((course) => (
-                <div
-                  key={course.course_id}
-                  className="rounded-xl border border-[#DBEAFE]"
-                >
-                  <div className="flex items-center gap-3 px-4 py-3">
-                    <BookOpen className="text-[#0052CC]" size={17} />
-                    <div>
-                      <h3 className="text-sm font-semibold text-slate-800">
-                        {course.course_name}
-                      </h3>
-                      <p className="text-[11px] text-[#475569]">
-                        with {course.teacher?.full_name ?? ""}
-                      </p>
-                    </div>
+          <div className="space-y-4 p-5">
+            {recentActivity.length ? recentActivity.map((item, index) => {
+              const Icon = item.icon;
+              return (
+                <div key={`${item.title}-${index}`} className="flex items-start gap-3">
+                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${item.tone}`}>
+                    <Icon size={15} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[#0F172A]">{item.title}</p>
+                    <p className="mt-1 text-xs leading-5 text-[#64748B]">{item.detail}</p>
                   </div>
-                  {exercises
-                    .filter(
-                      (item) => item.course?.course_id === course.course_id,
-                    )
-                    .map((exercise) => (
-                      <div
-                        key={exercise.exercise_id}
-                        className="flex items-center gap-3 border-t border-[#DBEAFE] px-4 py-3"
-                      >
-                        <span
-                          className={`h-2 w-2 rounded-full ${submittedIds.has(exercise.exercise_id) ? "bg-emerald-500" : "bg-slate-300"}`}
-                        />
-                        <span className="flex-1 text-xs font-medium text-slate-700">
-                          {exercise.exercise_name}
-                        </span>
-                        <span className="rounded-full bg-[#EFF6FF] px-2 py-1 text-[10px] font-semibold text-[#475569]">
-                          {submittedIds.has(exercise.exercise_id)
-                            ? "Submitted"
-                            : "Not submitted"}
-                        </span>
-                        {!submittedIds.has(exercise.exercise_id) && (
-                          <button
-                            onClick={() => submitExercise(exercise.exercise_id)}
-                            className="text-xs font-bold text-[#0052CC]"
-                          >
-                            Submit
-                          </button>
-                        )}
-                        <span className="w-14 text-right text-xs font-bold">
-                          {grades.find(
-                            (grade) =>
-                              grade.exercise_id === exercise.exercise_id,
-                          )?.score ?? "-"}
-                        </span>
-                      </div>
-                    ))}
                 </div>
-              ))
-            ) : (
-              <p className="text-sm text-[#64748B]">No courses enrolled.</p>
+              );
+            }) : (
+              <p className="text-sm text-[#64748B]">Your activity will appear here as you learn.</p>
             )}
           </div>
         </section>
-        <aside className="space-y-5">
-          <section className="rounded-2xl bg-[#0c2254] p-5 text-white">
-            <div className="flex items-center gap-2 text-blue-200">
-              <Bell size={16} />
-              <span className="text-xs font-semibold uppercase tracking-[.15em]">
-                Announcements
-              </span>
-            </div>
-            {announcements.length ? (
-              announcements.slice(0, 3).map((item) => (
-                <div key={item.notification_id} className="mt-4">
-                  <h3 className="font-bold">{item.title}</h3>
-                  <p className="mt-1 text-sm text-blue-100/80">
-                    {item.message}
-                  </p>
-                </div>
-              ))
-            ) : (
-              <p className="mt-4 text-sm text-blue-100/80">
-                No new announcements.
-              </p>
-            )}
-          </section>
-          <section className="rounded-2xl border border-[#DBEAFE] bg-white p-5">
-            <h2 className="font-bold text-[#0F172A]">Recent feedback</h2>
-            {privateFeedback.length ? (
-              privateFeedback.slice(0, 3).map((item) => (
-                <div
-                  key={item.notification_id}
-                  className="mt-4 border-b border-slate-50 pb-3"
-                >
-                  <p className="text-xs font-semibold text-slate-800">
-                    {item.title}
-                  </p>
-                  <p className="mt-1 text-xs leading-5 text-[#475569]">
-                    {item.message}
-                  </p>
-                </div>
-              ))
-            ) : (
-              <p className="mt-4 text-sm text-[#64748B]">
-                No private feedback yet.
-              </p>
-            )}
-          </section>
-        </aside>
       </div>
     </section>
   );
@@ -3265,6 +4459,8 @@ export function ConnectedApp({
   const [adminStudents, setAdminStudents] = useState<AdminStudent[]>([]);
   const [adminTeachers, setAdminTeachers] = useState<AdminTeacher[]>([]);
   const [adminClasses, setAdminClasses] = useState<AdminClass[]>([]);
+  const [adminProfile, setAdminProfile] = useState<{ admin_id: number; full_name: string; email: string } | null>(null);
+  const [adminNotifications, setAdminNotifications] = useState<TeacherNotification[]>([]);
   const [teacherData, setTeacherData] = useState<Teacher | null>(null);
   const [teacherStudents, setTeacherStudents] = useState<AttendanceStudent[]>(
     [],
@@ -3286,18 +4482,46 @@ export function ConnectedApp({
   const [studentNotifications, setStudentNotifications] = useState<StudentNotification[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [active, setActive] = useState("Overview");
+  const [language, setLanguage] = useState<Language>("en");
+
+  useEffect(() => {
+    const storedLanguage = window.localStorage.getItem(LANGUAGE_KEY) as Language | null;
+    if (storedLanguage === "en" || storedLanguage === "fr" || storedLanguage === "ar") {
+      setLanguage(storedLanguage);
+    }
+    document.documentElement.lang = storedLanguage ?? "en";
+    document.documentElement.dir = storedLanguage === "ar" ? "rtl" : "ltr";
+    const handleLanguageChange = (event: Event) => {
+      const value = (event as CustomEvent<Language>).detail;
+      if (value === "en" || value === "fr" || value === "ar") {
+        setLanguage(value);
+        document.documentElement.lang = value;
+        document.documentElement.dir = value === "ar" ? "rtl" : "ltr";
+      }
+    };
+    window.addEventListener("eduinsight-language-change", handleLanguageChange);
+    return () => window.removeEventListener("eduinsight-language-change", handleLanguageChange);
+  }, []);
   const reloadAdmin = async () => {
-    const [apiStudents, apiTeachers, apiClasses] = await Promise.all([
+    const [profile, apiStudents, apiTeachers, apiClasses, apiNotifications] = await Promise.all([
+      api.getAdminProfile(),
       api.getStudents(),
       api.getTeachers(),
       api.getClasses(),
+      api.getAdminNotifications(),
     ]);
+    setAdminProfile(profile);
+    setUserName(profile.full_name);
+    setAdminNotifications(apiNotifications);
     setAdminStudents(
       apiStudents.map((student) => ({
         student_id: student.student_id,
         name: student.full_name,
         email: student.email,
+        phone_number: student.phone_number,
         className: student.level ?? "",
+        class_id: student.class_id,
+        class_ids: student.class_ids,
         status: "Active",
         initials: student.full_name
           .split(" ")
@@ -3337,21 +4561,27 @@ export function ConnectedApp({
 
     const loadData = async () => {
       if (sessionRole === "admin") {
-        const [profile, apiStudents, apiTeachers, apiClasses] =
+        const [profile, apiStudents, apiTeachers, apiClasses, apiNotifications] =
           await Promise.all([
             api.getAdminProfile(),
             api.getStudents(),
             api.getTeachers(),
             api.getClasses(),
+            api.getAdminNotifications(),
           ]);
         if (!cancelled) {
           setUserName(profile.full_name);
+          setAdminProfile(profile);
+          setAdminNotifications(apiNotifications);
           setAdminStudents(
             apiStudents.map((student) => ({
               student_id: student.student_id,
               name: student.full_name,
               email: student.email,
+              phone_number: student.phone_number,
               className: student.level ?? "",
+              class_id: student.class_id,
+              class_ids: student.class_ids,
               status: "Active",
               initials: student.full_name
                 .split(" ")
@@ -3368,6 +4598,7 @@ export function ConnectedApp({
           name: student.full_name,
           email: student.email,
           className: student.level ?? "",
+          class_id: student.class_id,
           status: "Active",
           initials: student.full_name
             .split(" ")
@@ -3385,6 +4616,7 @@ export function ConnectedApp({
           apiExercises,
           apiGrades,
           apiAttendance,
+          apiNotifications,
         ] = await Promise.all([
           Promise.all(
             teacherObj.classes.map((item) =>
@@ -3395,6 +4627,7 @@ export function ConnectedApp({
           api.getTeacherExercises(),
           api.getTeacherGrades(),
           api.getTeacherAttendance(),
+          api.getNotifications(),
         ]);
         if (!cancelled) {
           setUserName(teacherObj.full_name);
@@ -3404,7 +4637,7 @@ export function ConnectedApp({
           setTeacherExercises(apiExercises);
           setTeacherGrades(apiGrades);
           setTeacherAttendance(apiAttendance);
-          setTeacherNotifications([]); // Clear feed to prevent student notifications from leaking to teacher
+          setTeacherNotifications(apiNotifications);
         }
       };
 
@@ -3476,7 +4709,7 @@ export function ConnectedApp({
     window.location.assign("/login");
   };
   return (
-    <div className="flex min-h-screen bg-white text-[#0F172A]">
+    <div dir={language === "ar" ? "rtl" : "ltr"} className={`flex min-h-screen bg-white text-[#0F172A] ${role === "Teacher" ? "teacher-workspace" : role === "Admin" ? "admin-workspace" : ""}`}>
       <Sidebar
         role={role}
         open={sidebarOpen}
@@ -3485,6 +4718,7 @@ export function ConnectedApp({
         userName={userName}
         onLogout={logout}
         setActive={setActive}
+        language={language}
       />
       <div className="min-w-0 flex-1">
         <Topbar
@@ -3492,13 +4726,15 @@ export function ConnectedApp({
           setOpen={setSidebarOpen}
           onLogout={logout}
           userName={userName}
-          notifications={teacherNotifications}
+          notifications={role === "Student" ? studentNotifications : role === "Admin" ? adminNotifications : teacherNotifications}
+          language={language}
         />
-        <main className="mx-auto max-w-[1500px] p-5 md:p-8">
+        <main className="mx-auto max-w-[1500px] p-5 pb-24 md:p-8 md:pb-24 lg:pb-8">
           {role === "Student" ? (
             studentProfile ? (
               <ClassicStudentWorkspace
                 active={active}
+                setActive={setActive}
                 profile={studentProfile}
                 courses={studentCourses}
                 exercises={studentExercises}
@@ -3521,6 +4757,7 @@ export function ConnectedApp({
                 exercises={teacherExercises}
                 grades={teacherGrades}
                 attendance={teacherAttendance}
+                teacherNotifications={teacherNotifications}
                 reload={async () => {
                   if ((window as any).reloadTeacherData) {
                     await (window as any).reloadTeacherData();
@@ -3536,17 +4773,65 @@ export function ConnectedApp({
                 Loading teacher workspace...
               </p>
             )
+          ) : active === "Profile" && adminProfile ? (
+            <AdminProfile profile={adminProfile} reload={reloadAdmin} />
+          ) : active === "Notifications" ? (
+            <AdminNotifications
+              students={adminStudents}
+              classes={adminClasses}
+              reload={reloadAdmin}
+              language={language}
+            />
           ) : active === "Reports" ? (
             <AdminReports students={adminStudents} />
           ) : (
-            <AdminWorkspace
-              students={adminStudents}
-              teachers={adminTeachers}
-              classes={adminClasses}
-              reload={reloadAdmin}
-            />
+            <>
+              <AdminWorkspace
+                students={adminStudents}
+                teachers={adminTeachers}
+                classes={adminClasses}
+                reload={reloadAdmin}
+                adminName={userName}
+              />
+              <div className="mt-6">
+                <NotificationList notifications={adminNotifications} />
+              </div>
+            </>
           )}
         </main>
+        {role === "Teacher" && (
+          <nav className="fixed inset-x-0 bottom-0 z-40 grid h-20 grid-cols-5 border-t border-[#DBE2EA] bg-white px-2 shadow-[0_-4px_16px_rgba(15,23,42,.06)] lg:hidden">
+            {[
+              ["Dashboard", LayoutDashboard],
+              ["My Classes", GraduationCap],
+              ["My Students", Users],
+              ["My Courses", BookOpen],
+              ["Exercises", ClipboardCheck],
+            ].map(([label, Icon]) => {
+              const NavIcon = Icon as typeof LayoutDashboard;
+              const isActive = active === label || (label === "Dashboard" && active === "Overview");
+              return (
+                <button
+                  key={label as string}
+                  onClick={() => setActive(label as string)}
+                  className={`flex flex-col items-center justify-center gap-1 text-[11px] font-medium ${isActive ? "text-[#1769E0]" : "text-[#475569]"}`}
+                >
+                  <NavIcon size={21} strokeWidth={isActive ? 2.5 : 2} />
+                  <span>{label as string}</span>
+                </button>
+              );
+            })}
+          </nav>
+        )}
+        {role === "Admin" && (
+          <nav className="fixed inset-x-0 bottom-0 z-40 grid h-16 grid-cols-3 border-t border-[#DDE8DF] bg-white px-2 shadow-[0_-4px_16px_rgba(22,101,52,.06)] lg:hidden">
+            {[["Overview", LayoutDashboard], ["Reports", BarChart3], ["Profile", Settings]].map(([label, Icon]) => {
+              const NavIcon = Icon as typeof LayoutDashboard;
+              const isActive = active === label;
+              return <button key={label as string} onClick={() => setActive(label as string)} className={`flex flex-col items-center justify-center gap-1 text-[11px] font-medium ${isActive ? "text-[#15803D]" : "text-[#64748B]"}`}><NavIcon size={19} strokeWidth={isActive ? 2.5 : 2} /><span>{label as string}</span></button>;
+            })}
+          </nav>
+        )}
       </div>
     </div>
   );

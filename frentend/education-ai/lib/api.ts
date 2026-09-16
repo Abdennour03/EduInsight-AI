@@ -18,6 +18,7 @@ export type ApiStudent = {
   phone_number?: string;
   level?: string;
   class_id?: number | null;
+  class_ids?: number[];
 };
 
 export type ApiClass = {
@@ -103,7 +104,20 @@ export type TeacherNotification = {
   message: string;
   teacher_id: number;
   teacher_name: string;
+  sender_role?: "teacher" | "admin";
   created_at: string;
+};
+
+export type StudentReportData = {
+  student_id: number;
+  name: string;
+  email: string;
+  class_info?: { class_id: number; name: string; academic_year: string } | null;
+  exercises_and_exams: Array<{
+    exercise_id: number;
+    exercise_name: string;
+    score: number | null;
+  }>;
 };
 
 export type LoginResponse = {
@@ -228,7 +242,7 @@ export const api = {
       body: formData,
     });
   },
-  sendClassAnnouncement: (data: { title: string; message: string }) =>
+  sendClassAnnouncement: (data: { title: string; message: string; class_id?: number }) =>
     request<{ message: string }>("/teachers/me/notifications", {
       method: "POST",
       body: JSON.stringify(data),
@@ -244,6 +258,18 @@ export const api = {
   getTeacherStudents: () =>
     request<AttendanceStudent[]>("/teachers/me/students"),
   getNotifications: () => request<TeacherNotification[]>("/notifications/"),
+  getAdminNotifications: () =>
+    request<TeacherNotification[]>("/admin/notifications"),
+  sendAdminNotification: (data: {
+    title: string;
+    message: string;
+    class_id?: number;
+    student_id?: number;
+  }) =>
+    request<{ message: string }>("/admin/notifications", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   getAdminProfile: () =>
     request<{ admin_id: number; full_name: string; email: string }>(
       "/admin/me",
@@ -300,6 +326,18 @@ export const api = {
       body: formData,
     });
   },
+  replaceStudentSubmission: (submissionId: number, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return request<Submission>(`/students/me/submissions/${submissionId}`, {
+      method: "PUT",
+      body: formData,
+    });
+  },
+  deleteStudentSubmission: (submissionId: number) =>
+    request<{ message: string }>(`/students/me/submissions/${submissionId}`, {
+      method: "DELETE",
+    }),
   getStudentNotifications: () =>
     request<StudentNotification[]>("/students/me/notifications"),
   updateStudentProfile: (
@@ -360,7 +398,7 @@ export const api = {
       { method: "POST" },
     ),
   getStudentReport: (studentId: number) =>
-    request<Record<string, unknown>>(`/admin/students/${studentId}/report`),
+    request<StudentReportData>(`/admin/students/${studentId}/report`),
   createStudent: (data: {
     full_name: string;
     email: string;
@@ -382,6 +420,7 @@ export const api = {
       phone_number: string;
       level: string;
       class_id: number;
+      class_ids?: number[];
     }>,
   ) =>
     request<{ message: string }>(`/admin/students/${studentId}`, {

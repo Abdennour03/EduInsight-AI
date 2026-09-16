@@ -127,13 +127,40 @@ class StudentRepo:
             """SELECT student_id, full_name, email,
                       password, phone_number, level, class_id
                FROM students
-               WHERE class_id = ?""",
-            (class_id,),
+                    WHERE class_id = ? OR student_id IN (
+                         SELECT student_id FROM student_classes WHERE class_id = ?
+                    )""",
+                (class_id, class_id),
         )
         return [
             Student(row[0], row[1], row[2], row[3], row[4], row[5], row[6])
             for row in self.db.cursor.fetchall()
         ]
+
+    def get_student_class_ids(self, student_id):
+        self.db.cursor.execute(
+            "SELECT class_id FROM student_classes WHERE student_id = ? ORDER BY class_id",
+            (student_id,),
+        )
+        ids = [row[0] for row in self.db.cursor.fetchall()]
+        if ids:
+            return ids
+        student = self.get_student(student_id)
+        return [student.class_id] if student and student.class_id is not None else []
+
+    def set_student_class_ids(self, student_id, class_ids):
+        self.db.cursor.execute(
+            "DELETE FROM student_classes WHERE student_id = ?", (student_id,)
+        )
+        self.db.cursor.executemany(
+            "INSERT INTO student_classes (student_id, class_id) VALUES (?, ?)",
+            [(student_id, class_id) for class_id in class_ids],
+        )
+        self.db.cursor.execute(
+            "UPDATE students SET class_id = ? WHERE student_id = ?",
+            (class_ids[0] if class_ids else None, student_id),
+        )
+        self.db.connection.commit()
         
 
     def update_student(self, student_id, **kwargs):

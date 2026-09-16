@@ -401,7 +401,12 @@ def send_notification_to_students(
 ):
     """Broadcast an announcement to all students in the teacher's assigned classes."""
     try:
-        class_ids = [c.class_id for c in current_user.classes]
+        assigned_class_ids = [c.class_id for c in current_user.classes]
+        class_ids = assigned_class_ids
+        if data.class_id is not None:
+            if data.class_id not in assigned_class_ids:
+                raise ValueError("You can only message students in your assigned classes.")
+            class_ids = [data.class_id]
         if not class_ids:
             raise ValueError("You have no assigned classes to send notifications to.")
 

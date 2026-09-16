@@ -17,12 +17,24 @@ router = APIRouter(
 
 def notification_to_response(notification):
 
+    if notification.admin_sender is not None:
+        return {
+            "notification_id": notification.notification_id,
+            "title": notification.title,
+            "message": notification.message,
+            "teacher_id": 0,
+            "teacher_name": notification.admin_sender.full_name,
+            "sender_role": "admin",
+            "created_at": notification.created_at,
+        }
+
     return {
         "notification_id": notification.notification_id,
         "title": notification.title,
         "message": notification.message,
         "teacher_id": notification.sender.teacher_id,
         "teacher_name": notification.sender.full_name,
+        "sender_role": "teacher",
         "created_at": notification.created_at
     }
 

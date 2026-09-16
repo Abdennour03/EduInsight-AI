@@ -1,5 +1,6 @@
 import sqlite3
 import threading
+import os
 
 
 class _LockedCursor:
@@ -71,7 +72,8 @@ class _LockedConnection:
 
 
 class Database:
-    def __init__(self, db_name="eduinsight.db"):
+    def __init__(self, db_name=None):
+        db_name = db_name or os.getenv("EDUINSIGHT_DB_PATH", "eduinsight.db")
         self._lock = threading.RLock()
         self.connection = _LockedConnection(
             sqlite3.connect(db_name, check_same_thread=False),
@@ -222,6 +224,18 @@ class Database:
             self.cursor.execute(
                 "ALTER TABLE exercises ADD COLUMN max_score REAL NOT NULL DEFAULT 20"
             )
+        notification_columns = {
+            row[1]
+            for row in self.cursor.execute("PRAGMA table_info(notifications)")
+        }
+        if "admin_id" not in notification_columns:
+            self.cursor.execute(
+                "ALTER TABLE notifications ADD COLUMN admin_id INTEGER REFERENCES admins(id)"
+            )
+        if "sender_type" not in notification_columns:
+            self.cursor.execute(
+                "ALTER TABLE notifications ADD COLUMN sender_type TEXT NOT NULL DEFAULT 'teacher'"
+            )
         student_columns = {
             row[1] for row in self.cursor.execute("PRAGMA table_info(students)")
         }
@@ -267,8 +281,22 @@ class Database:
             )"""
         )
         self.cursor.execute(
+            """CREATE TABLE IF NOT EXISTS student_classes (
+                student_id INTEGER NOT NULL,
+                class_id INTEGER NOT NULL,
+                PRIMARY KEY (student_id, class_id),
+                FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,
+                FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
+            )"""
+        )
+        self.cursor.execute(
             """INSERT OR IGNORE INTO teacher_classes (teacher_id, class_id)
                SELECT teacher_id, class_id FROM teachers
+               WHERE class_id IS NOT NULL"""
+        )
+        self.cursor.execute(
+            """INSERT OR IGNORE INTO student_classes (student_id, class_id)
+               SELECT student_id, class_id FROM students
                WHERE class_id IS NOT NULL"""
         )
         if "admin_id" in admin_columns and "password" in admin_columns:
