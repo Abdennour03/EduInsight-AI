@@ -54,11 +54,20 @@ class AdminService:
         return self.get_profile(admin_id)
 
     def create_student(self, data):
+        class_ids = data.class_ids or ([data.class_id] if data.class_id is not None else [])
+        if not class_ids:
+            raise ValueError("Please select at least one valid class.")
+        classes = [self.class_service.get_class(class_id) for class_id in class_ids]
+        levels = {class_group.name.strip().split()[0].upper() for class_group in classes}
+        if len(levels) > 1:
+            raise ValueError(
+                "Impossible to combine classes from different academic levels (e.g., 3AC and 1BAC)."
+            )
         student = self.student_service.create_student(
-            data.full_name, data.email, data.password, data.phone_number, data.level
+            data.full_name, data.email, data.password, data.phone_number, classes[0].name,
+            class_id=class_ids[0],
         )
-        if data.class_id is not None:
-            self.assign_student_to_class(student.student_id, data.class_id)
+        self.student_service.set_student_classes(student.student_id, class_ids)
         return student
 
     def create_teacher(self, data):

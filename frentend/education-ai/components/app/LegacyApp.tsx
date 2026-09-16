@@ -2021,6 +2021,9 @@ function AdminWorkspace({
   const [query, setQuery] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [selectedNewStudentClassIds, setSelectedNewStudentClassIds] = useState<number[]>([]);
+  const [showAdditionalStudentClass, setShowAdditionalStudentClass] = useState(false);
   const [classAssignmentTeacher, setClassAssignmentTeacher] =
     useState<AdminTeacher | null>(null);
   const [editingTeacher, setEditingTeacher] = useState<AdminTeacher | null>(null);
@@ -2056,36 +2059,58 @@ function AdminWorkspace({
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
+    setFieldErrors({});
     const data = new FormData(event.currentTarget);
+    const nextErrors: Record<string, string> = {};
+    const fullName = String(data.get("full_name") ?? "").trim();
+    const email = String(data.get("email") ?? "").trim();
+    const phone = String(data.get("phone_number") ?? "").trim();
+    const password = String(data.get("password") ?? "");
+    if (tab === "Classes") {
+      if (!String(data.get("name") ?? "").trim()) nextErrors.name = "Class name is required";
+      if (!String(data.get("academic_year") ?? "").trim()) nextErrors.academic_year = "Academic year is required";
+    }
+    if (tab === "Students" || tab === "Teachers") {
+      if (!fullName) nextErrors.full_name = "Full name is required";
+      if (!email) nextErrors.email = "Email is required";
+      else if (!/^\S+@\S+\.\S+$/.test(email)) nextErrors.email = "Enter a valid email address";
+      if (!phone) nextErrors.phone_number = "Phone number is required";
+      else if (phone.replace(/\D/g, "").length < 10) nextErrors.phone_number = "Phone number must be at least 10 digits";
+      if (!password) nextErrors.password = "Password is required";
+    }
+    if (tab === "Students") {
+      const selectedClasses = classes.filter((item) => selectedNewStudentClassIds.includes(item.class_id));
+      if (!selectedClasses.length) nextErrors.class_ids = "Please select at least one valid class";
+      const levels = new Set(selectedClasses.map((item) => item.name.trim().split(/\s+/)[0].toUpperCase()));
+      if (levels.size > 1) nextErrors.class_ids = "Impossible to combine classes from different academic levels (e.g., 3AC and 1BAC).";
+    }
+    if (Object.keys(nextErrors).length) {
+      setFieldErrors(nextErrors);
+      setError("Please correct the highlighted fields before saving.");
+      return;
+    }
     try {
-      if (tab === "Classes")
+      if (tab === "Classes") {
         await api.createClass({
-          name: String(data.get("name")),
-          academic_year: String(data.get("academic_year")),
+          name: String(data.get("name")).trim(),
+          academic_year: String(data.get("academic_year")).trim(),
           teacher_ids: data.getAll("teacher_ids").map(Number),
         });
+      }
       if (tab === "Students") {
-        // Level and class_id must come from the SAME selected class, not
-        // from two independently-typed values. Courses are matched to
-        // students by an exact string comparison against `level`, so a
-        // free-typed level ("3ac", "3AC ", "3 AC"...) that doesn't exactly
-        // match a real class name silently orphans the student from every
-        // course/exercise in that class, even though class_id looks fine.
-        const selectedClassId = Number(data.get("class_id")) || undefined;
-        const selectedClass = classes.find(
-          (c) => c.class_id === selectedClassId,
-        );
+        const selectedClass = classes.find((item) => item.class_id === selectedNewStudentClassIds[0]);
         if (!selectedClass) {
-          setError("Please select a class for the student.");
+          setError("Please select at least one valid class.");
           return;
         }
         await api.createStudent({
-          full_name: String(data.get("full_name")),
-          email: String(data.get("email")),
-          password: String(data.get("password")),
-          phone_number: String(data.get("phone_number")),
+          full_name: fullName,
+          email,
+          password,
+          phone_number: phone,
           level: selectedClass.name,
-          class_id: selectedClass.class_id,
+          class_id: selectedNewStudentClassIds[0],
+          class_ids: selectedNewStudentClassIds,
         });
       }
       if (tab === "Teachers")
@@ -2097,6 +2122,9 @@ function AdminWorkspace({
           class_ids: data.getAll("class_ids").map(Number),
         });
       setFormOpen(false);
+      setFieldErrors({});
+      setSelectedNewStudentClassIds([]);
+      setShowAdditionalStudentClass(false);
       await reload();
     } catch (submissionError) {
       setError(
@@ -2404,12 +2432,14 @@ function AdminWorkspace({
                   placeholder="Class name"
                   className="rounded-lg border border-[#DBEAFE] px-3 py-2 text-sm"
                 />
+                {fieldErrors.name && <p className="text-xs font-semibold text-rose-600 sm:col-span-2">{fieldErrors.name}</p>}
                 <input
                   name="academic_year"
                   required
                   placeholder="Academic year"
                   className="rounded-lg border border-[#DBEAFE] px-3 py-2 text-sm"
                 />
+                {fieldErrors.academic_year && <p className="text-xs font-semibold text-rose-600 sm:col-span-2">{fieldErrors.academic_year}</p>}
                 <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
                   Assign teachers (optional)
                   <select
@@ -2437,6 +2467,7 @@ function AdminWorkspace({
                   placeholder="Full name"
                   className="rounded-lg border border-[#DBEAFE] px-3 py-2 text-sm"
                 />
+                {fieldErrors.full_name && <p className="text-xs font-semibold text-rose-600">{fieldErrors.full_name}</p>}
                 <input
                   name="email"
                   required
@@ -2444,6 +2475,7 @@ function AdminWorkspace({
                   placeholder="Email"
                   className="rounded-lg border border-[#DBEAFE] px-3 py-2 text-sm"
                 />
+                {fieldErrors.email && <p className="text-xs font-semibold text-rose-600">{fieldErrors.email}</p>}
                 <input
                   name="password"
                   required
@@ -2451,28 +2483,22 @@ function AdminWorkspace({
                   placeholder="Password"
                   className="rounded-lg border border-[#DBEAFE] px-3 py-2 text-sm"
                 />
+                {fieldErrors.password && <p className="text-xs font-semibold text-rose-600">{fieldErrors.password}</p>}
                 <input
                   name="phone_number"
                   required
                   placeholder="Phone"
                   className="rounded-lg border border-[#DBEAFE] px-3 py-2 text-sm"
                 />
+                {fieldErrors.phone_number && <p className="text-xs font-semibold text-rose-600">{fieldErrors.phone_number}</p>}
                 {tab === "Students" ? (
-                  <select
-                    name="class_id"
-                    required
-                    defaultValue=""
-                    className="rounded-lg border border-[#DBEAFE] px-3 py-2 text-sm"
-                  >
-                    <option value="" disabled>
-                      Select class
-                    </option>
-                    {classes.map((c) => (
-                      <option key={c.class_id} value={c.class_id}>
-                        {c.name} · {c.academic_year}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="rounded-lg border border-[#DBEAFE] p-3 sm:col-span-2">
+                    <div className="flex items-center justify-between gap-3"><span className="text-sm font-semibold text-slate-700">Assign classes</span><button type="button" onClick={() => setShowAdditionalStudentClass(true)} className="text-xs font-bold text-[#15803D]">+ Add class</button></div>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      {(showAdditionalStudentClass ? classes : classes.slice(0, 1)).map((c) => <label key={c.class_id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-[#FEF9C3]"><input type="checkbox" checked={selectedNewStudentClassIds.includes(c.class_id)} onChange={(event) => setSelectedNewStudentClassIds((current) => event.target.checked ? [...current, c.class_id] : current.filter((id) => id !== c.class_id))} className="h-4 w-4 accent-[#15803D]" /><span>{c.name} · {c.academic_year}</span></label>)}
+                    </div>
+                    {fieldErrors.class_ids && <p className="mt-2 text-xs font-semibold text-rose-600">{fieldErrors.class_ids}</p>}
+                  </div>
                 ) : (
                   <label className="text-sm font-semibold text-slate-700">
                     Assign existing classes (optional)
@@ -2503,12 +2529,12 @@ function AdminWorkspace({
               </p>
             )}
             <button
-              disabled={tab === "Students" && classes.length === 0}
-              className="rounded-lg bg-[#0052CC] px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+              type="submit"
+              className="rounded-lg bg-[#0052CC] px-4 py-2 text-sm font-bold text-white"
             >
               Save
             </button>
-            {error && <p className="text-sm text-rose-600">{error}</p>}
+            {error && <p role="alert" className="sm:col-span-2 rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p>}
           </form>
         </div>
       )}

@@ -406,6 +406,7 @@ export const api = {
     phone_number: string;
     level: string;
     class_id?: number;
+    class_ids?: number[];
   }) =>
     request<ApiStudent>("/admin/students", {
       method: "POST",

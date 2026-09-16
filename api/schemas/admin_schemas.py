@@ -25,6 +25,7 @@ class AdminStudentCreate(BaseModel):
     phone_number: str
     level: str
     class_id: int | None = None
+    class_ids: list[int] = Field(default_factory=list)
 
 
 class AdminProfileResponse(BaseModel):
