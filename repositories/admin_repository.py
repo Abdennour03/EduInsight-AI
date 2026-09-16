@@ -5,6 +5,15 @@ class AdminRepo:
     def __init__(self, db):
         self.db = db
 
+    def create_organization(self, name=None):
+        org_name = (name or "Default Organization").strip() or "Default Organization"
+        self.db.cursor.execute(
+            "INSERT INTO organizations (name) VALUES (?)",
+            (org_name,),
+        )
+        self.db.connection.commit()
+        return self.db.cursor.lastrowid
+
     def add_admin(self, admin):
         columns = {row[1] for row in self.db.cursor.execute("PRAGMA table_info(admins)")}
         next_id = self.db.cursor.execute(
@@ -12,10 +21,7 @@ class AdminRepo:
         ).fetchone()[0]
         organization_id = getattr(admin, "organization_id", None)
         if organization_id is None:
-            organization_id = self.db.cursor.execute(
-                "SELECT id FROM organizations ORDER BY id LIMIT 1"
-            ).fetchone()
-            organization_id = organization_id[0] if organization_id else None
+            organization_id = self.create_organization(f"{admin.full_name.strip()} Organization")
         if "password" in columns:
             self.db.cursor.execute(
                 """INSERT INTO admins

@@ -1,3 +1,5 @@
+import re
+
 from models.admin import Admin
 from utils.security import hash_password
 
@@ -53,13 +55,17 @@ class AdminService:
         if not class_ids:
             raise ValueError("Please select at least one valid class.")
         classes = [self.class_service.get_class(class_id, admin_id) for class_id in class_ids]
-        levels = {class_group.name.strip().split()[0].upper() for class_group in classes}
+        levels = {self._academic_level(class_group.name) for class_group in classes}
         if len(levels) > 1:
             raise ValueError(
                 "Impossible to combine classes from different academic levels (e.g., 3AC and 1BAC)."
             )
         student = self.student_service.create_student(
-            data.full_name, data.email, data.password, data.phone_number, classes[0].name,
+            data.full_name,
+            data.email,
+            data.password,
+            data.phone_number,
+            self._academic_level(classes[0].name),
             class_id=class_ids[0],
             admin_id=admin_id,
         )
@@ -96,12 +102,15 @@ class AdminService:
         levels = set()
         for class_id in class_ids:
             class_group = self.class_service.get_class(class_id, admin_id)
-            level = class_group.name.strip().split()[0].upper()
-            levels.add(level)
+            levels.add(self._academic_level(class_group.name))
         if len(levels) > 1:
             raise ValueError(
                 "Impossible to combine classes from different academic levels (e.g., 3AC and 1BAC)."
             )
+
+    @staticmethod
+    def _academic_level(class_name):
+        return re.split(r"[\s_.·-]+", class_name.strip().upper(), maxsplit=1)[0]
 
     def update_teacher(self, teacher_id, updates, admin_id):
         self.assert_teacher_access(teacher_id, admin_id)

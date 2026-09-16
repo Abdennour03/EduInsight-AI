@@ -62,6 +62,35 @@ def test_admin_login_includes_organization_id(tmp_path):
     db.close()
 
 
+def test_new_admins_receive_distinct_organizations(tmp_path):
+    db = Database(str(tmp_path / "new-admin-orgs.db"))
+    admin_repo = AdminRepo(db)
+
+    admin_a = Admin(None, "Admin A", "admin-a@example.com", hash_password("Pass123!"))
+    admin_b = Admin(None, "Admin B", "admin-b@example.com", hash_password("Pass123!"))
+    admin_repo.add_admin(admin_a)
+    admin_repo.add_admin(admin_b)
+
+    assert admin_a.organization_id is not None
+    assert admin_b.organization_id is not None
+    assert admin_a.organization_id != admin_b.organization_id
+    db.close()
+
+
+def test_new_admin_login_uses_new_organization_id(tmp_path):
+    db = Database(str(tmp_path / "new-admin-login-org.db"))
+    admin_repo = AdminRepo(db)
+    admin = Admin(None, "New Org Admin", "new-admin@example.com", hash_password("SecurePass123!"))
+    admin_repo.add_admin(admin)
+
+    token = AuthService(StudentRepo(db), TeacherRepo(db), admin_repo).login("new-admin@example.com", "SecurePass123!")
+    payload = decode_access_token(token["access_token"])
+
+    assert payload["role"] == "admin"
+    assert payload["organization_id"] == admin.organization_id
+    db.close()
+
+
 def test_same_org_admins_share_data(tmp_path):
     db = Database(str(tmp_path / "same-org-share.db"))
     admin_repo = AdminRepo(db)
@@ -78,6 +107,18 @@ def test_same_org_admins_share_data(tmp_path):
 
     assert class_repo.get_class(class_group.class_id, admin_id=admin_a2.admin_id).class_id == class_group.class_id
     assert [item.class_id for item in class_repo.get_all_classes_for_admin(admin_a2.admin_id)] == [class_group.class_id]
+    db.close()
+
+
+def test_explicit_organization_id_is_preserved(tmp_path):
+    db = Database(str(tmp_path / "explicit-org.db"))
+    admin_repo = AdminRepo(db)
+    org_id = db.cursor.execute("SELECT id FROM organizations ORDER BY id LIMIT 1").fetchone()[0]
+
+    admin = Admin(None, "Explicit Org Admin", "explicit@example.com", hash_password("Pass123!"), organization_id=org_id)
+    admin_repo.add_admin(admin)
+
+    assert admin.organization_id == org_id
     db.close()
 
 

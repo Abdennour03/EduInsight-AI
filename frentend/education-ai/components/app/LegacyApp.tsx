@@ -76,6 +76,9 @@ type Role = "Student" | "Teacher" | "Admin";
 
 const blue = "#0052CC";
 
+const academicLevel = (className: string) =>
+  className.trim().toUpperCase().split(/[\s_.·-]+/, 1)[0];
+
 let students = [
   {
     name: "Amine El Idrissi",
@@ -390,7 +393,7 @@ function Topbar({
           {notifications.length > 0 && <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#F59E0B]" />}
         </button>
         {notificationsOpen && (
-          <div className="absolute right-24 top-16 z-50 w-80 rounded-xl border border-[#DBEAFE] bg-white p-4 shadow-lg">
+          <div className="absolute right-3 top-16 z-50 w-[min(20rem,calc(100vw-1.5rem))] rounded-xl border border-[#DBEAFE] bg-white p-4 shadow-lg sm:right-24">
             <h3 className="font-bold text-[#0F172A]">Notifications</h3>
             {notifications.length ? (
               notifications.map((notification) => (
@@ -2081,7 +2084,7 @@ function AdminWorkspace({
     if (tab === "Students") {
       const selectedClasses = classes.filter((item) => selectedNewStudentClassIds.includes(item.class_id));
       if (!selectedClasses.length) nextErrors.class_ids = "Please select at least one valid class";
-      const levels = new Set(selectedClasses.map((item) => item.name.trim().split(/\s+/)[0].toUpperCase()));
+      const levels = new Set(selectedClasses.map((item) => academicLevel(item.name)));
       if (levels.size > 1) nextErrors.class_ids = "Impossible to combine classes from different academic levels (e.g., 3AC and 1BAC).";
     }
     if (Object.keys(nextErrors).length) {
@@ -2108,7 +2111,7 @@ function AdminWorkspace({
           email,
           password,
           phone_number: phone,
-          level: selectedClass.name,
+          level: academicLevel(selectedClass.name),
           class_id: selectedNewStudentClassIds[0],
           class_ids: selectedNewStudentClassIds,
         });
@@ -2210,7 +2213,7 @@ function AdminWorkspace({
     }
     const selectedClassId = selectedClassIds[0];
     const selectedClasses = classes.filter((item) => selectedClassIds.includes(item.class_id));
-    const academicLevels = new Set(selectedClasses.map((item) => item.name.trim().split(/\s+/)[0].toUpperCase()));
+    const academicLevels = new Set(selectedClasses.map((item) => academicLevel(item.name)));
     if (academicLevels.size > 1) {
       setStudentEditError("Impossible to combine classes from different academic levels (e.g., 3AC and 1BAC).");
       return;
@@ -2225,7 +2228,7 @@ function AdminWorkspace({
         ...(String(data.get("password") ?? "") ? { password: String(data.get("password")) } : {}),
         class_id: selectedClassId,
         class_ids: selectedClassIds,
-        level: selectedClass?.name,
+        level: selectedClass ? academicLevel(selectedClass.name) : undefined,
       });
       setStudentEditSuccess("Student information updated successfully.");
       await reload();
@@ -4755,7 +4758,7 @@ export function ConnectedApp({
           notifications={role === "Student" ? studentNotifications : role === "Admin" ? adminNotifications : teacherNotifications}
           language={language}
         />
-        <main className="mx-auto max-w-[1500px] p-5 pb-24 md:p-8 md:pb-24 lg:pb-8">
+        <main className="mx-auto w-full max-w-[1500px] p-3 pb-24 sm:p-5 md:p-8 md:pb-24 lg:pb-8">
           {role === "Student" ? (
             studentProfile ? (
               <ClassicStudentWorkspace

@@ -158,6 +158,8 @@
 body {
   font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   letter-spacing: 0;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 h1,
@@ -202,4 +204,18 @@ h6 {
 
 .teacher-workspace [class~="rounded-2xl"] {
   border-radius: 0.625rem !important;
+}
+
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea,
+  button {
+    max-width: 100%;
+  }
+
+  .admin-workspace main,
+  .teacher-workspace main {
+    padding: 0.75rem 0.75rem 6rem;
+  }
 }
