@@ -9,10 +9,10 @@ class AdminService:
         self.teacher_service = teacher_service
         self.class_service = class_service
 
-    def create_admin(self, full_name, email, password):
+    def create_admin(self, full_name, email, password, organization_id=None):
         if not full_name.strip() or not email.strip() or not password:
             raise ValueError("Admin name, email, and password are required.")
-        admin = Admin(None, full_name.strip(), email.strip(), hash_password(password))
+        admin = Admin(None, full_name.strip(), email.strip(), hash_password(password), organization_id=organization_id)
         self.admin_repo.add_admin(admin)
         return admin
 
@@ -66,7 +66,7 @@ class AdminService:
         self.student_service.set_student_classes(student.student_id, class_ids)
         return student
 
-    def create_teacher(self, data, admin_id):
+    def create_teacher(self, data, admin_id=None):
         if data.class_ids is not None:
             for class_id in data.class_ids:
                 self.class_service.get_class(class_id, admin_id)

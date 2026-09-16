@@ -23,8 +23,11 @@ class AuthService:
                     if role == "teacher"
                     else user.admin_id
                 )
+                payload = {"sub": str(user_id), "role": role}
+                if hasattr(user, "organization_id") and user.organization_id is not None:
+                    payload["organization_id"] = user.organization_id
                 return {
-                    "access_token": create_access_token({"sub": str(user_id), "role": role}),
+                    "access_token": create_access_token(payload),
                     "token_type": "bearer",
                     "role": role,
                 }

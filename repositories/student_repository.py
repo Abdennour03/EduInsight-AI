@@ -3,12 +3,22 @@ from models.student import Student
 class StudentRepo:
     def __init__(self, db):
         self.db = db
-        
-    def add_student(self, student, admin_id=None):
+
+    def _organization_for_admin(self, admin_id):
+        if admin_id is None:
+            return None
+        row = self.db.cursor.execute(
+            "SELECT organization_id FROM admins WHERE id = ?",
+            (admin_id,),
+        ).fetchone()
+        return row[0] if row else None
+
+    def add_student(self, student, admin_id=None, organization_id=None):
+        organization_id = organization_id if organization_id is not None else self._organization_for_admin(admin_id)
         self.db.cursor.execute("""
     INSERT INTO students
-    (full_name, email, password, phone_number, level, class_id, admin_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    (full_name, email, password, phone_number, level, class_id, admin_id, organization_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (student.full_name,
          student.email,
@@ -16,20 +26,23 @@ class StudentRepo:
          student.phone_number,
          student.level,
          student.class_id,
-         admin_id
+         admin_id,
+         organization_id,
          ))
         self.db.connection.commit()
         student.student_id = self.db.cursor.lastrowid
+        student.organization_id = organization_id
 
 
 
-    def get_student(self, student_id, admin_id=None):
+    def get_student(self, student_id, admin_id=None, organization_id=None):
+        organization_id = organization_id if organization_id is not None else self._organization_for_admin(admin_id)
         self.db.cursor.execute("""
         SELECT student_id, full_name, email,
-               password, phone_number, level, class_id
+               password, phone_number, level, class_id, organization_id
         FROM students
-        WHERE student_id = ?""" + (" AND admin_id = ?" if admin_id is not None else ""),
-        (student_id, admin_id) if admin_id is not None else (student_id,))
+        WHERE student_id = ?""" + (" AND (? IS NULL OR organization_id = ?)" if organization_id is not None else ""),
+        (student_id, organization_id, organization_id) if organization_id is not None else (student_id,))
 
         row = self.db.cursor.fetchone()
         if row is None:
@@ -42,15 +55,31 @@ class StudentRepo:
             row[3],
             row[4],
             row[5],
-            row[6]
+            row[6],
+            organization_id=row[7]
         )
-    def get_all_student(self, admin_id=None):
-        self.db.cursor.execute("""
-        SELECT student_id, full_name, email,
-               password, phone_number, level, class_id
-        FROM students
-        WHERE (? IS NULL OR admin_id = ?)
-    """, (admin_id, admin_id))
+    def get_all_student(self, admin_id=None, organization_id=None):
+        organization_id = organization_id if organization_id is not None else self._organization_for_admin(admin_id)
+        if organization_id is not None:
+            self.db.cursor.execute("""
+            SELECT student_id, full_name, email,
+                   password, phone_number, level, class_id, organization_id
+            FROM students
+            WHERE organization_id = ?
+            """, (organization_id,))
+        elif admin_id is not None:
+            self.db.cursor.execute("""
+            SELECT student_id, full_name, email,
+                   password, phone_number, level, class_id, organization_id
+            FROM students
+            WHERE admin_id = ?
+            """, (admin_id,))
+        else:
+            self.db.cursor.execute("""
+            SELECT student_id, full_name, email,
+                   password, phone_number, level, class_id, organization_id
+            FROM students
+            """)
 
         rows = self.db.cursor.fetchall()
 
@@ -65,22 +94,24 @@ class StudentRepo:
                     row[3],
                     row[4],
                     row[5],
-                    row[6]
+                    row[6],
+                    organization_id=row[7]
                 )
             )
 
         return students
 
     def get_all_students_for_admin(self, admin_id):
+        organization_id = self._organization_for_admin(admin_id)
         self.db.cursor.execute(
             """SELECT student_id, full_name, email,
-                      password, phone_number, level, class_id
+                      password, phone_number, level, class_id, organization_id
                FROM students
-               WHERE admin_id = ?""",
-            (admin_id,),
+               WHERE organization_id = ?""",
+            (organization_id,),
         )
         return [
-            Student(row[0], row[1], row[2], row[3], row[4], row[5], row[6])
+            Student(row[0], row[1], row[2], row[3], row[4], row[5], row[6], organization_id=row[7])
             for row in self.db.cursor.fetchall()
         ]
 
@@ -178,9 +209,10 @@ class StudentRepo:
         self.db.connection.commit()
 
     def belongs_to_admin(self, student_id, admin_id):
+        organization_id = self._organization_for_admin(admin_id)
         return self.db.cursor.execute(
-            "SELECT 1 FROM students WHERE student_id = ? AND admin_id = ?",
-            (student_id, admin_id),
+            "SELECT 1 FROM students WHERE student_id = ? AND organization_id = ?",
+            (student_id, organization_id),
         ).fetchone() is not None
         
 
@@ -247,14 +279,15 @@ WHERE student_id = ?""", (student_id,))
 
     
     def search_student(self, name, admin_id=None):
+        organization_id = self._organization_for_admin(admin_id)
 
         self.db.cursor.execute("""
             SELECT student_id, full_name, email,
                 password, phone_number, level, class_id
             FROM students
             WHERE full_name LIKE ?
-        """ + (" AND admin_id = ?" if admin_id is not None else ""),
-        (f"%{name}%", admin_id) if admin_id is not None else (f"%{name}%",))
+        """ + (" AND organization_id = ?" if organization_id is not None else ""),
+        (f"%{name}%", organization_id) if organization_id is not None else (f"%{name}%",))
 
         rows = self.db.cursor.fetchall()
         students = []
@@ -276,12 +309,13 @@ WHERE student_id = ?""", (student_id,))
 
     
     def count_students(self, admin_id=None):
+        organization_id = self._organization_for_admin(admin_id)
 
         self.db.cursor.execute("""
             SELECT COUNT(*)
             FROM students
-        """ + (" WHERE admin_id = ?" if admin_id is not None else ""),
-        (admin_id,) if admin_id is not None else ())
+        """ + (" WHERE organization_id = ?" if organization_id is not None else ""),
+        (organization_id,) if organization_id is not None else ())
         result = self.db.cursor.fetchone()
 
         return result[0]

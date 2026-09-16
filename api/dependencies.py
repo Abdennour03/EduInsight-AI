@@ -89,16 +89,26 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         payload = decode_access_token(credentials.credentials)
         user_id = int(payload.get("sub"))
         role = payload.get("role")
+        token_org_id = payload.get("organization_id")
     except (Exception, TypeError, ValueError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
 
     try:
         if role == "student":
-            return student_service.get_student(user_id)
+            user = student_service.get_student(user_id)
+            if token_org_id is not None and getattr(user, "organization_id", None) is not None and user.organization_id != token_org_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization mismatch")
+            return user
         if role == "teacher":
-            return teacher_service.get_teacher(user_id)
+            user = teacher_service.get_teacher(user_id)
+            if token_org_id is not None and getattr(user, "organization_id", None) is not None and user.organization_id != token_org_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization mismatch")
+            return user
         if role == "admin":
-            return admin_service.get_admin(user_id)
+            user = admin_service.get_admin(user_id)
+            if token_org_id is not None and getattr(user, "organization_id", None) is not None and user.organization_id != token_org_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization mismatch")
+            return user
     except ValueError:
         pass
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
