@@ -71,8 +71,23 @@ import {
 } from "recharts";
 import { jsPDF } from "jspdf";
 import { LANGUAGE_KEY, type Language, translate } from "../../lib/i18n";
+import ErrorBoundary from "./ErrorBoundary";
 
 type Role = "Student" | "Teacher" | "Admin";
+
+const asArray = <T,>(value: unknown): T[] =>
+  Array.isArray(value) ? value : [];
+
+const displayName = (value: unknown, fallback = "User") =>
+  typeof value === "string" && value.trim() ? value.trim() : fallback;
+
+const initialsFor = (value: unknown) =>
+  displayName(value)
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
 const blue = "#0052CC";
 
@@ -128,6 +143,25 @@ type AdminTeacher = {
   classes: { class_id: number; name: string; academic_year: string }[];
 };
 type AdminClass = { class_id: number; name: string; academic_year: string };
+
+const toAdminStudent = (student: ApiStudent): AdminStudent => ({
+  student_id: student.student_id,
+  name: displayName(student.full_name),
+  email: displayName(student.email, "No email"),
+  phone_number: student.phone_number,
+  className: student.level ?? "",
+  class_id: student.class_id,
+  class_ids: student.class_ids,
+  status: "Active",
+  initials: initialsFor(student.full_name),
+});
+
+const toAdminTeacher = (teacher: AdminTeacher): AdminTeacher => ({
+  ...teacher,
+  full_name: displayName(teacher.full_name, "Teacher"),
+  email: displayName(teacher.email, "No email"),
+  classes: asArray<AdminTeacher["classes"][number]>(teacher.classes),
+});
 
 // ---- Admin student report ---------------------------------------------
 // Matches AdminStudentReportResponse from the OpenAPI spec exactly:
@@ -1157,7 +1191,7 @@ function DynamicTeacherWorkspace({
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {courses.length ? courses.map((course) => {
             const courseExercises = exercises.filter(
-              (exercise) => exercise.course.course_id === course.course_id,
+              (exercise) => exercise.course?.course_id === course.course_id,
             );
             const courseClass = teacher.classes.find((item) => item.name === course.level);
             const courseStudents = students.filter((student) => student.class_id === courseClass?.class_id);
@@ -1642,7 +1676,7 @@ function DynamicTeacherWorkspace({
                     <Avatar initials={student.full_name.split(" ").map((part) => part[0]).join("").slice(0, 2)} />
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-[#0F172A]">{student.full_name}</p>
-                      <p className="truncate text-xs text-[#64748B]">{exercise?.exercise_name ?? "Recent submission"} · {exercise?.course.course_name ?? "Course"}</p>
+                      <p className="truncate text-xs text-[#64748B]">{exercise?.exercise_name ?? "Recent submission"} · {exercise?.course?.course_name ?? "Course"}</p>
                     </div>
                   </div>
                   <button className="rounded-lg border border-[#DBEAFE] bg-white px-3 py-1.5 text-xs font-semibold text-[#0F172A]">Grade</button>
@@ -4618,30 +4652,16 @@ export function ConnectedApp({
       api.getTeachers(),
       api.getClasses(),
     ]);
-    const apiNotifications = await api.getAdminNotifications().catch(() => []);
+    const safeStudents = asArray<ApiStudent>(apiStudents);
+    const safeTeachers = asArray<AdminTeacher>(apiTeachers).map(toAdminTeacher);
+    const safeClasses = asArray<AdminClass>(apiClasses);
+    const apiNotifications = asArray<TeacherNotification>(await api.getAdminNotifications().catch(() => []));
     setAdminProfile(profile);
-    setUserName(profile.full_name);
+    setUserName(displayName(profile?.full_name, "Administrator"));
     setAdminNotifications(apiNotifications);
-    setAdminStudents(
-      apiStudents.map((student) => ({
-        student_id: student.student_id,
-        name: student.full_name,
-        email: student.email,
-        phone_number: student.phone_number,
-        className: student.level ?? "",
-        class_id: student.class_id,
-        class_ids: student.class_ids,
-        status: "Active",
-        initials: student.full_name
-          .split(" ")
-          .map((part) => part[0])
-          .join("")
-          .slice(0, 2)
-          .toUpperCase(),
-      })),
-    );
-    setAdminTeachers(apiTeachers);
-    setAdminClasses(apiClasses);
+    setAdminStudents(safeStudents.map(toAdminStudent));
+    setAdminTeachers(safeTeachers);
+    setAdminClasses(safeClasses);
   };
 
   useEffect(() => {
@@ -4678,51 +4698,26 @@ export function ConnectedApp({
             api.getTeachers(),
             api.getClasses(),
           ]);
-        const apiNotifications = await api.getAdminNotifications().catch(() => []);
+        const safeStudents = asArray<ApiStudent>(apiStudents);
+        const safeTeachers = asArray<AdminTeacher>(apiTeachers).map(toAdminTeacher);
+        const safeClasses = asArray<AdminClass>(apiClasses);
+        const apiNotifications = asArray<TeacherNotification>(await api.getAdminNotifications().catch(() => []));
         if (!cancelled) {
-          setUserName(profile.full_name);
+          setUserName(displayName(profile?.full_name, "Administrator"));
           setAdminProfile(profile);
           setAdminNotifications(apiNotifications);
-          setAdminStudents(
-            apiStudents.map((student) => ({
-              student_id: student.student_id,
-              name: student.full_name,
-              email: student.email,
-              phone_number: student.phone_number,
-              className: student.level ?? "",
-              class_id: student.class_id,
-              class_ids: student.class_ids,
-              status: "Active",
-              initials: student.full_name
-                .split(" ")
-                .map((part) => part[0])
-                .join("")
-                .slice(0, 2)
-                .toUpperCase(),
-            })),
-          );
-          setAdminTeachers(apiTeachers);
-          setAdminClasses(apiClasses);
+          setAdminStudents(safeStudents.map(toAdminStudent));
+          setAdminTeachers(safeTeachers);
+          setAdminClasses(safeClasses);
         }
-        students = apiStudents.map((student) => ({
-          name: student.full_name,
-          email: student.email,
-          className: student.level ?? "",
-          class_id: student.class_id,
-          status: "Active",
-          initials: student.full_name
-            .split(" ")
-            .map((part) => part[0])
-            .join("")
-            .slice(0, 2)
-            .toUpperCase(),
-        }));
+        students = safeStudents.map(toAdminStudent);
       }
 
       const loadTeacherData = async (teacherObj: Teacher) => {
         const normalizedTeacher: Teacher = {
           ...teacherObj,
-          classes: Array.isArray(teacherObj.classes) ? teacherObj.classes : [],
+          full_name: displayName(teacherObj?.full_name, "Teacher"),
+          classes: asArray<Teacher["classes"][number]>(teacherObj?.classes),
         };
         if (!cancelled) {
           setUserName(normalizedTeacher.full_name);
@@ -4743,14 +4738,14 @@ export function ConnectedApp({
         ]);
         const valueOr = <T,>(index: number, fallback: T): T =>
           results[index].status === "fulfilled" ? results[index].value as T : fallback;
-        const classStudentGroups = valueOr<AttendanceStudent[][]>(0, []);
-        const apiCourses = valueOr<TeacherCourse[]>(1, []);
-        const apiExercises = valueOr<TeacherExercise[]>(2, []);
-        const apiGrades = valueOr<Grade[]>(3, []);
-        const apiAttendance = valueOr<AttendanceRecord[]>(4, []);
-        const apiNotifications = valueOr<TeacherNotification[]>(5, []);
+        const classStudentGroups = asArray<AttendanceStudent[]>(valueOr(0, [])).filter(Array.isArray);
+        const apiCourses = asArray<TeacherCourse>(valueOr(1, []));
+        const apiExercises = asArray<TeacherExercise>(valueOr(2, []));
+        const apiGrades = asArray<Grade>(valueOr(3, []));
+        const apiAttendance = asArray<AttendanceRecord>(valueOr(4, []));
+        const apiNotifications = asArray<TeacherNotification>(valueOr(5, []));
         if (!cancelled) {
-          setTeacherStudents(classStudentGroups.flat());
+          setTeacherStudents(classStudentGroups.flat().filter(Boolean));
           setTeacherCourses(apiCourses);
           setTeacherExercises(apiExercises);
           setTeacherGrades(apiGrades);
@@ -4786,24 +4781,29 @@ export function ConnectedApp({
           api.getStudentSubmissions(),
           api.getStudentNotifications(),
         ]);
+        const safeCourses = asArray<Course>(apiCourses);
+        const safeExercises = asArray<Exercise>(apiExercises);
+        const safeGrades = asArray<Grade>(apiGrades);
+        const safeSubmissions = asArray<Submission>(apiSubmissions);
+        const safeNotifications = asArray<StudentNotification>(apiNotifications);
         if (!cancelled) {
-          setUserName(profile.full_name);
+          setUserName(displayName(profile?.full_name, "Student"));
           setStudentProfile(profile);
-          setStudentCourses(apiCourses);
-          setStudentExercises(apiExercises);
-          setStudentGrades(apiGrades);
-          setStudentSubmissions(apiSubmissions);
-          setStudentNotifications(apiNotifications);
+          setStudentCourses(safeCourses);
+          setStudentExercises(safeExercises);
+          setStudentGrades(safeGrades);
+          setStudentSubmissions(safeSubmissions);
+          setStudentNotifications(safeNotifications);
         }
-        courses = apiCourses.map((course) => ({
-          name: course.course_name,
+        courses = safeCourses.map((course) => ({
+          name: course.course_name ?? "Course",
           teacher: course.teacher?.full_name ?? "",
-          exercises: apiExercises
+          exercises: safeExercises
             .filter(
               (exercise) => exercise.course?.course_id === course.course_id,
             )
             .map((exercise) => {
-              const grade = apiGrades.find(
+              const grade = safeGrades.find(
                 (item) => item.exercise_id === exercise.exercise_id,
               );
               return {
@@ -4853,6 +4853,7 @@ export function ConnectedApp({
           notifications={role === "Student" ? studentNotifications : role === "Admin" ? adminNotifications : teacherNotifications}
           language={language}
         />
+        <ErrorBoundary>
         <main className="mx-auto w-full max-w-[1500px] p-3 pb-24 sm:p-5 md:p-8 md:pb-24 lg:pb-8">
           {role === "Student" ? (
             studentProfile ? (
@@ -4935,6 +4936,7 @@ export function ConnectedApp({
             </>
           )}
         </main>
+        </ErrorBoundary>
         {role === "Teacher" && (
           <nav className="fixed inset-x-0 bottom-0 z-40 grid h-20 grid-cols-5 border-t border-[#DBE2EA] bg-white px-2 shadow-[0_-4px_16px_rgba(15,23,42,.06)] lg:hidden">
             {[
