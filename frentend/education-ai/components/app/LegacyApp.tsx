@@ -4501,6 +4501,7 @@ export function ConnectedApp({
   const [teacherGrades, setTeacherGrades] = useState<Grade[]>([]);
   const [teacherAttendance, setTeacherAttendance] = useState<AttendanceRecord[]>([]);
   const [teacherNotifications, setTeacherNotifications] = useState<TeacherNotification[]>([]);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [studentProfile, setStudentProfile] = useState<ApiStudent | null>(null);
   const [studentCourses, setStudentCourses] = useState<Course[]>([]);
   const [studentExercises, setStudentExercises] = useState<Exercise[]>([]);
@@ -4589,6 +4590,7 @@ export function ConnectedApp({
     if (!cancelled) setRole(displayRole);
 
     const loadData = async () => {
+      setWorkspaceError(null);
       if (sessionRole === "admin") {
         const [profile, apiStudents, apiTeachers, apiClasses] =
           await Promise.all([
@@ -4726,7 +4728,13 @@ export function ConnectedApp({
         }));
       }
     };
-    loadData().catch(() => undefined);
+    loadData().catch((error) => {
+      if (!cancelled) {
+        setWorkspaceError(
+          error instanceof Error ? error.message : "Unable to load workspace.",
+        );
+      }
+    });
     return () => {
       cancelled = true;
     };
@@ -4777,7 +4785,19 @@ export function ConnectedApp({
               </p>
             )
           ) : role === "Teacher" ? (
-            teacherData ? (
+            workspaceError ? (
+              <div className="max-w-xl rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-800">
+                <p className="font-semibold">Unable to load teacher workspace</p>
+                <p className="mt-2">{workspaceError}</p>
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="mt-4 rounded-lg bg-red-700 px-4 py-2 font-semibold text-white hover:bg-red-800"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : teacherData ? (
               <DynamicTeacherWorkspace
                 active={active}
                 teacher={teacherData}
