@@ -55,13 +55,14 @@ export default function LoginPage() {
 		try {
 			const identifier = String(form.get('identifier') ?? '')
 			const email = String(form.get('email') ?? '')
+			const phoneNumber = String(form.get('phone_number') ?? '')
 			const password = String(form.get('password') ?? '')
 			if (isSetup) {
 				const confirmPassword = String(form.get('confirmPassword') ?? '')
 				if (password !== confirmPassword) {
 					throw new Error('Passwords do not match.')
 				}
-				await api.setupAdmin({ name: String(form.get('name') ?? ''), email, password })
+				await api.setupAdmin({ name: String(form.get('name') ?? ''), email, phone_number: phoneNumber, password })
 				setIsSetup(false)
 				setShowPassword(false)
 				setShowConfirmPassword(false)
@@ -102,6 +103,10 @@ export default function LoginPage() {
 					{isSetup && <label className="block text-sm font-semibold text-[#0F172A]">
 						Full Name
 						<input name="name" type="text" required className="mt-2 w-full rounded-xl border border-[#DDE8D6] bg-white px-4 py-3.5 text-base outline-none focus:border-[#D4A72C] focus:ring-2 focus:ring-[#F4E6B9]" />
+					</label>}
+					{isSetup && <label className="block text-sm font-semibold text-[#0F172A]">
+						Phone Number
+						<input name="phone_number" type="tel" required inputMode="numeric" className="mt-2 w-full rounded-xl border border-[#DDE8D6] bg-white px-4 py-3.5 text-base outline-none focus:border-[#D4A72C] focus:ring-2 focus:ring-[#F4E6B9]" />
 					</label>}
 					<label className="block text-sm font-semibold text-[#0F172A]">
 						{isSetup ? 'Email Address' : 'Email or Phone Number'}

@@ -89,12 +89,14 @@ def setup_admin(data: AdminSetupRequest):
         admin = admin_controller.setup_admin(
             data.name,
             data.email,
+            data.phone_number,
             data.password,
         )
         return {
             "message": "Admin account created successfully.",
             "admin_id": admin.admin_id,
             "email": admin.email,
+            "phone_number": admin.phone_number,
         }
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))

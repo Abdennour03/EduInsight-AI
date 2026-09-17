@@ -2,6 +2,7 @@ import re
 
 from models.admin import Admin
 from utils.security import hash_password
+from utils.student_validation import StudentValidator
 
 
 class AdminService:
@@ -11,15 +12,16 @@ class AdminService:
         self.teacher_service = teacher_service
         self.class_service = class_service
 
-    def create_admin(self, full_name, email, password, organization_id=None):
-        if not full_name.strip() or not email.strip() or not password:
-            raise ValueError("Admin name, email, and password are required.")
-        admin = Admin(None, full_name.strip(), email.strip(), hash_password(password), organization_id=organization_id)
+    def create_admin(self, full_name, email, phone_number, password, organization_id=None):
+        if not full_name.strip() or not email.strip() or not phone_number.strip() or not password:
+            raise ValueError("Admin name, email, phone number, and password are required.")
+        StudentValidator.validate_phone_number(phone_number)
+        admin = Admin(None, full_name.strip(), email.strip(), hash_password(password), organization_id=organization_id, phone_number=phone_number.strip())
         self.admin_repo.add_admin(admin)
         return admin
 
-    def setup_admin(self, full_name, email, password):
-        return self.create_admin(full_name, email, password)
+    def setup_admin(self, full_name, email, phone_number, password):
+        return self.create_admin(full_name, email, phone_number, password)
 
     def get_admin(self, admin_id):
         admin = self.admin_repo.get_admin(admin_id)
@@ -33,6 +35,7 @@ class AdminService:
             "admin_id": admin.admin_id,
             "full_name": admin.full_name,
             "email": admin.email,
+            "phone_number": admin.phone_number,
         }
 
     def update_profile(self, admin_id, updates):

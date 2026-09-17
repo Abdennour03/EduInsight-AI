@@ -22,6 +22,7 @@ export default function SetupPage() {
       await api.setupAdmin({
         name: String(form.get('full_name') ?? ''),
         email: String(form.get('email') ?? ''),
+        phone_number: String(form.get('phone_number') ?? ''),
         password: String(form.get('password') ?? ''),
       })
       setMessage('Admin environment created. You can sign in now.')
@@ -49,6 +50,10 @@ export default function SetupPage() {
           <label className="block text-sm font-semibold text-[#0F172A]">
             Email
             <input name="email" type="email" required className="mt-1.5 w-full rounded-lg border border-[#CBD5E1] px-3 py-2.5 text-sm outline-none focus:border-[#0052CC]" />
+          </label>
+          <label className="block text-sm font-semibold text-[#0F172A]">
+            Phone number
+            <input name="phone_number" type="tel" inputMode="numeric" required className="mt-1.5 w-full rounded-lg border border-[#CBD5E1] px-3 py-2.5 text-sm outline-none focus:border-[#0052CC]" />
           </label>
           <label className="block text-sm font-semibold text-[#0F172A]">
             Password

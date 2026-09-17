@@ -33,6 +33,7 @@ class AdminProfileResponse(BaseModel):
     admin_id: int
     full_name: str
     email: str
+    phone_number: str | None = None
 
 
 class AdminProfileUpdate(BaseModel):
@@ -44,6 +45,7 @@ class AdminProfileUpdate(BaseModel):
 class AdminSetupRequest(BaseModel):
     name: str
     email: str
+    phone_number: str
     password: str
 
 

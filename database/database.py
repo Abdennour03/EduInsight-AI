@@ -126,6 +126,7 @@ class Database:
             CREATE TABLE IF NOT EXISTS admins (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 email TEXT NOT NULL UNIQUE,
+                phone_number TEXT,
                 password_hash TEXT NOT NULL,
                 full_name TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -239,6 +240,12 @@ class Database:
                 FOREIGN KEY (notification_id) REFERENCES notifications(notification_id)
             );
             """
+        )
+        admin_columns = {row[1] for row in self.cursor.execute("PRAGMA table_info(admins)")}
+        if "phone_number" not in admin_columns:
+            self.cursor.execute("ALTER TABLE admins ADD COLUMN phone_number TEXT")
+        self.cursor.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_admins_phone_unique ON admins(phone_number) WHERE phone_number IS NOT NULL"
         )
         self.cursor.execute("DROP INDEX IF EXISTS idx_students_phone_unique")
         self.cursor.execute("DROP INDEX IF EXISTS idx_teachers_phone_unique")

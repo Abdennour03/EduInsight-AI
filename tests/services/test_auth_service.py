@@ -1,5 +1,6 @@
 from database.database import Database
 from models.student import Student
+from models.admin import Admin
 from repositories.admin_repository import AdminRepo
 from repositories.student_repository import StudentRepo
 from repositories.teacher_repository import TeacherRepo
@@ -46,4 +47,24 @@ def test_email_login_remains_supported(tmp_path):
     )
 
     assert result["role"] == "student"
+    db.close()
+
+
+def test_admin_can_login_with_unique_phone_number(tmp_path):
+    db = Database(str(tmp_path / "admin-phone-login.db"))
+    password = "SecurePass123!"
+    admin = Admin(
+        None,
+        "Phone Admin",
+        "admin@example.com",
+        hash_password(password),
+        phone_number="0612345680",
+    )
+    AdminRepo(db).add_admin(admin)
+
+    result = AuthService(StudentRepo(db), TeacherRepo(db), AdminRepo(db)).login(
+        admin.phone_number, password
+    )
+
+    assert result["role"] == "admin"
     db.close()

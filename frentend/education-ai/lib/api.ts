@@ -189,8 +189,8 @@ export const api = {
       throw error;
     }
   },
-  setupAdmin: (data: { name: string; email: string; password: string }) =>
-    request<{ message: string; admin_id: number; email: string }>(
+  setupAdmin: (data: { name: string; email: string; phone_number: string; password: string }) =>
+    request<{ message: string; admin_id: number; email: string; phone_number: string }>(
       "/admin/setup",
       {
         method: "POST",

@@ -21,6 +21,8 @@ class AuthService:
             ("admin", self.admin_repo.get_admin_by_email(identifier))
             if self.admin_repo is not None else ("__disabled__", None),
         )
+        if self.admin_repo is not None and candidates[-1][1] is None:
+            candidates = candidates[:-1] + (("admin", self.admin_repo.get_admin_by_phone(identifier)),)
         for role, user in candidates:
             if user is not None and verify_password(password, user.password):
                 user_id = (

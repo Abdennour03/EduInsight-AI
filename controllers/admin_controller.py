@@ -5,8 +5,8 @@ class AdminController:
     def create_student(self, data, admin_id):
         return self.admin_service.create_student(data, admin_id)
 
-    def setup_admin(self, full_name, email, password):
-        return self.admin_service.setup_admin(full_name, email, password)
+    def setup_admin(self, full_name, email, phone_number, password):
+        return self.admin_service.setup_admin(full_name, email, phone_number, password)
 
     def create_teacher(self, data, admin_id):
         return self.admin_service.create_teacher(data, admin_id)
