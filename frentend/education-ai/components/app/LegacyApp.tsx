@@ -4008,6 +4008,8 @@ function StudentProgressWorkspace({
   grades,
   submissions,
   onSubmitExercise,
+  fileInputRef,
+  onSubmissionFile,
 }: {
   profile: ApiStudent;
   courses: Course[];
@@ -4015,6 +4017,8 @@ function StudentProgressWorkspace({
   grades: Grade[];
   submissions: Submission[];
   onSubmitExercise: (exerciseId: number) => void;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  onSubmissionFile: (event: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   const [selectedCourse, setSelectedCourse] = useState("All Courses");
   const [searchQuery, setSearchQuery] = useState("");
@@ -4063,6 +4067,14 @@ function StudentProgressWorkspace({
 
   return (
     <section className="space-y-7">
+      <input
+        ref={fileInputRef}
+        type="file"
+        name="file"
+        accept="application/pdf,image/jpeg,image/png"
+        className="hidden"
+        onChange={onSubmissionFile}
+      />
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
         <div>
           <p className="text-xs font-bold uppercase tracking-[.14em] text-[#64748B]">Student workspace</p>
@@ -4353,6 +4365,8 @@ function ClassicStudentWorkspace({
         grades={grades}
         submissions={submissions}
         onSubmitExercise={submitExercise}
+        fileInputRef={fileInputRef}
+        onSubmissionFile={handleSubmissionFile}
       />
     );
   if (active === "My Courses")
