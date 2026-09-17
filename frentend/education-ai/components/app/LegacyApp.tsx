@@ -731,6 +731,20 @@ function DynamicTeacherWorkspace({
   const [messageMode, setMessageMode] = useState<"student" | "class">("student");
   const [broadcastClassId, setBroadcastClassId] = useState(teacher.classes[0]?.class_id ?? 0);
 
+  useEffect(() => {
+    if (!courses.length) {
+      setNewExerciseCourseId(0);
+      return;
+    }
+
+    const selectedCourseStillExists = courses.some(
+      (course) => course.course_id === newExerciseCourseId,
+    );
+    if (!selectedCourseStillExists) {
+      setNewExerciseCourseId(courses[0].course_id);
+    }
+  }, [courses, newExerciseCourseId]);
+
   const selectedStudents = students.filter(
     (student) => student.class_id === classId,
   );
@@ -814,7 +828,10 @@ function DynamicTeacherWorkspace({
     setExerciseFileError("");
     setExerciseSuccess("");
     setWorkspaceError("");
-    if (!newExerciseName.trim() || !newExerciseCourseId) {
+    const selectedCourse = courses.find(
+      (course) => course.course_id === newExerciseCourseId,
+    );
+    if (!newExerciseName.trim() || !selectedCourse) {
       setWorkspaceError("Choose a course and enter an exercise title.");
       return;
     }
@@ -1199,7 +1216,12 @@ function DynamicTeacherWorkspace({
             </button>
             <button
               type="button"
-              onClick={() => setShowExerciseModal(true)}
+              onClick={() => {
+                setWorkspaceError("");
+                setExerciseFileError("");
+                setExerciseSuccess("");
+                setShowExerciseModal(true);
+              }}
               className="inline-flex items-center gap-2 rounded-xl border border-[#BFDBFE] bg-white px-4 py-2.5 text-sm font-bold text-[#1769E0] transition hover:bg-[#EFF6FF]"
             >
               <Plus size={16} /> Add Exercise
@@ -4047,7 +4069,7 @@ function StudentProgressWorkspace({
           <h2 className="mt-1 text-2xl font-black tracking-tight text-[#07152F]">Academic Progress &amp; Performance</h2>
           <p className="mt-1 text-sm text-[#64748B]">Review your scores, submissions, and feedback in one place.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" size={15} />
             <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search exercise..." className="w-52 rounded-xl border border-[#DBEAFE] bg-white py-2.5 pl-9 pr-3 text-xs outline-none focus:border-[#1769E0] focus:ring-2 focus:ring-[#BFDBFE]" />
