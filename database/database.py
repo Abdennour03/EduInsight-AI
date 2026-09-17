@@ -262,6 +262,15 @@ class Database:
         self.cursor.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_teachers_unscoped_email_unique ON teachers(email) WHERE organization_id IS NULL"
         )
+        self.cursor.execute(
+            """UPDATE teacher_classes
+               SET organization_id = (
+                   SELECT organization_id
+                   FROM teachers
+                   WHERE teachers.teacher_id = teacher_classes.teacher_id
+               )
+               WHERE organization_id IS NULL"""
+        )
         self.cursor.execute("DROP INDEX IF EXISTS idx_students_phone_unique")
         self.cursor.execute("DROP INDEX IF EXISTS idx_teachers_phone_unique")
         self.cursor.execute("DROP INDEX IF EXISTS idx_students_org_phone_unique")

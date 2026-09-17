@@ -1,9 +1,12 @@
 from database.database import Database
 from models.student import Student
 from models.admin import Admin
+from models.teacher import Teacher
 from repositories.admin_repository import AdminRepo
 from repositories.student_repository import StudentRepo
 from repositories.teacher_repository import TeacherRepo
+from repositories.class_repository import ClassRepo
+from models.class_group import ClassGroup
 from services.auth_service import AuthService
 from utils.security import decode_access_token, hash_password
 
@@ -122,3 +125,23 @@ def test_account_persists_when_database_is_reopened(tmp_path):
 
     assert result["role"] == "student"
     reopened_db.close()
+
+
+def test_teacher_assignment_preserves_organization_and_is_visible(tmp_path):
+    db = Database(str(tmp_path / "teacher-assignment.db"))
+    admin_repo = AdminRepo(db)
+    admin = Admin(None, "Assignment Admin", "assignment@example.com", hash_password("SecurePass123!"), phone_number="0612345685")
+    admin_repo.add_admin(admin)
+    class_group = ClassGroup(None, "3AC Math", "2026")
+    class_repo = ClassRepo(db)
+    class_repo.add_class(class_group, admin_id=admin.admin_id)
+
+    teacher = Teacher(None, "Assigned Teacher", "assigned@example.com", hash_password("SecurePass123!"), "0612345686")
+    teacher_repo = TeacherRepo(db)
+    teacher_repo.add_teacher(teacher, admin_id=admin.admin_id)
+    teacher_repo.assign_teacher_to_classes(teacher.teacher_id, [class_group.class_id])
+
+    visible_teacher = teacher_repo.get_all_teachers_for_admin(admin.admin_id)[0]
+
+    assert [item.class_id for item in visible_teacher.classes] == [class_group.class_id]
+    db.close()

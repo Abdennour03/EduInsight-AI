@@ -119,12 +119,19 @@ class TeacherRepo:
         return True
 
     def assign_teacher_to_classes(self, teacher_id, class_ids):
+        teacher_row = self.db.cursor.execute(
+            "SELECT organization_id FROM teachers WHERE teacher_id = ?",
+            (teacher_id,),
+        ).fetchone()
+        organization_id = teacher_row[0] if teacher_row else None
         self.db.cursor.execute(
             "DELETE FROM teacher_classes WHERE teacher_id = ?", (teacher_id,)
         )
         self.db.cursor.executemany(
-            "INSERT INTO teacher_classes (teacher_id, class_id) VALUES (?, ?)",
-            [(teacher_id, class_id) for class_id in class_ids],
+            """INSERT INTO teacher_classes
+               (teacher_id, class_id, organization_id)
+               VALUES (?, ?, ?)""",
+            [(teacher_id, class_id, organization_id) for class_id in class_ids],
         )
         self.db.connection.commit()
 
