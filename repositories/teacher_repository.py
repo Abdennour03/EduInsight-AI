@@ -150,3 +150,12 @@ class TeacherRepo:
         )
         row = self.db.cursor.fetchone()
         return self._teacher_from_row(row) if row else None
+
+    def get_teacher_by_phone(self, phone_number):
+        self.db.cursor.execute(
+            """SELECT teacher_id, full_name, email, password, phone_number
+               FROM teachers WHERE phone_number = ?""",
+            (phone_number,),
+        )
+        row = self.db.cursor.fetchone()
+        return self._teacher_from_row(row) if row else None

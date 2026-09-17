@@ -17,8 +17,15 @@ router = APIRouter(
 @router.post("/login", response_model=LoginResponse)
 def login(data: LoginRequest):
 
+    identifier = data.identifier or data.email
+    if not identifier:
+        raise HTTPException(
+            status_code=422,
+            detail="Email or phone number is required"
+        )
+
     result = auth_controller.login(
-        data.email,
+        identifier,
         data.password
     )
 
@@ -26,7 +33,7 @@ def login(data: LoginRequest):
 
         raise HTTPException(
             status_code=401,
-            detail="Invalid email or password"
+            detail="Invalid email/phone number or password"
         )
 
     return result

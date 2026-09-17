@@ -349,6 +349,16 @@ WHERE student_id = ?""", (student_id,))
             row[5],
             row[6]
         )
+
+    def get_student_by_phone(self, phone_number):
+        self.db.cursor.execute("""
+            SELECT student_id, full_name, email, password, phone_number, level, class_id
+            FROM students
+            WHERE phone_number = ?
+        """, (phone_number,))
+        row = self.db.cursor.fetchone()
+        return Student(*row) if row else None
+
     def get_students_by_level(self, level):
         self.db.cursor.execute("""
             SELECT student_id, full_name, email, password, phone_number, level, class_id

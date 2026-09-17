@@ -171,16 +171,16 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  login: async (email: string, password: string) => {
+  login: async (identifier: string, password: string) => {
     try {
       return await request<LoginResponse>("/auth/login", {
         method: "POST",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ identifier, password }),
       });
     } catch (error) {
       if (
         error instanceof Error &&
-        error.message === "Invalid email or password"
+        error.message === "Invalid email/phone number or password"
       ) {
         throw new Error(
           "Invalid email or password. Create the admin environment first, then create teacher accounts from the admin workspace.",

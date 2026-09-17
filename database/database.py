@@ -240,6 +240,29 @@ class Database:
             );
             """
         )
+        self.cursor.execute("DROP INDEX IF EXISTS idx_students_phone_unique")
+        self.cursor.execute("DROP INDEX IF EXISTS idx_teachers_phone_unique")
+        self.cursor.execute(
+                """CREATE UNIQUE INDEX IF NOT EXISTS idx_students_org_phone_unique
+                    ON students(organization_id, phone_number)
+                    WHERE phone_number IS NOT NULL"""
+        )
+        self.cursor.execute(
+                """CREATE UNIQUE INDEX IF NOT EXISTS idx_teachers_org_phone_unique
+                    ON teachers(organization_id, phone_number)
+                    WHERE phone_number IS NOT NULL"""
+        )
+        self.cursor.execute(
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_students_unscoped_phone_unique
+               ON students(phone_number)
+               WHERE organization_id IS NULL AND phone_number IS NOT NULL"""
+        )
+        self.cursor.execute(
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_teachers_unscoped_phone_unique
+               ON teachers(phone_number)
+               WHERE organization_id IS NULL AND phone_number IS NOT NULL"""
+        )
+        self.connection.commit()
         notification_schema = self.cursor.execute(
             "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'notifications'"
         ).fetchone()

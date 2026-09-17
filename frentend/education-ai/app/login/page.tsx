@@ -53,6 +53,7 @@ export default function LoginPage() {
 		const form = new FormData(event.currentTarget)
 
 		try {
+			const identifier = String(form.get('identifier') ?? '')
 			const email = String(form.get('email') ?? '')
 			const password = String(form.get('password') ?? '')
 			if (isSetup) {
@@ -66,7 +67,7 @@ export default function LoginPage() {
 				setShowConfirmPassword(false)
 				setMessage('Admin account created. Sign in to continue.')
 			} else {
-				const session = await api.login(email, password)
+				const session = await api.login(identifier, password)
 				api.saveSession(session)
 				window.location.assign(`/${session.role}`)
 			}
@@ -103,8 +104,8 @@ export default function LoginPage() {
 						<input name="name" type="text" required className="mt-2 w-full rounded-xl border border-[#DDE8D6] bg-white px-4 py-3.5 text-base outline-none focus:border-[#D4A72C] focus:ring-2 focus:ring-[#F4E6B9]" />
 					</label>}
 					<label className="block text-sm font-semibold text-[#0F172A]">
-						{isSetup ? 'Email Address' : text('email')}
-						<input name="email" type="email" required className="mt-2 w-full rounded-xl border border-[#DDE8D6] bg-white px-4 py-3.5 text-base outline-none focus:border-[#D4A72C] focus:ring-2 focus:ring-[#F4E6B9]" />
+						{isSetup ? 'Email Address' : 'Email or Phone Number'}
+						<input name={isSetup ? 'email' : 'identifier'} type={isSetup ? 'email' : 'text'} required className="mt-2 w-full rounded-xl border border-[#DDE8D6] bg-white px-4 py-3.5 text-base outline-none focus:border-[#D4A72C] focus:ring-2 focus:ring-[#F4E6B9]" />
 					</label>
 					<label className="block text-sm font-semibold text-[#0F172A]">
 						{text('password')}

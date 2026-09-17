@@ -7,11 +7,18 @@ class AuthService:
         self.teacher_repo = teacher_repo
         self.admin_repo = admin_repo
 
-    def login(self, email, password):
+    def login(self, identifier, password):
+        identifier = identifier.strip()
+        student = self.student_repo.get_student_by_email(identifier)
+        if student is None:
+            student = self.student_repo.get_student_by_phone(identifier)
+        teacher = self.teacher_repo.get_teacher_by_email(identifier)
+        if teacher is None:
+            teacher = self.teacher_repo.get_teacher_by_phone(identifier)
         candidates = (
-            ("student", self.student_repo.get_student_by_email(email)),
-            ("teacher", self.teacher_repo.get_teacher_by_email(email)),
-            ("admin", self.admin_repo.get_admin_by_email(email))
+            ("student", student),
+            ("teacher", teacher),
+            ("admin", self.admin_repo.get_admin_by_email(identifier))
             if self.admin_repo is not None else ("__disabled__", None),
         )
         for role, user in candidates:
