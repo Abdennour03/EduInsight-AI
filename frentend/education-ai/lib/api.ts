@@ -156,7 +156,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     ) {
       window.location.assign("/login");
     }
-    throw new Error("Your session has expired. Please sign in again.");
+    throw new Error(
+      "We could not verify your account. Please check your email or phone number and password, then try again.",
+    );
   }
 
   const payload = await response.json().catch(() => null);
