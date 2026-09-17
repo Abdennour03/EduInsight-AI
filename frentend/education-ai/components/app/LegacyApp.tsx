@@ -1125,7 +1125,36 @@ function DynamicTeacherWorkspace({
   if (active === "My Courses") {
     return (
       <section id="my-courses" className="space-y-6">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <section className="rounded-2xl border border-[#BFDBFE] bg-[#EFF6FF] p-5 shadow-[0_2px_10px_rgba(37,99,235,.06)] sm:p-6">
+          <p className="text-sm font-semibold text-[#2563EB]">Teacher workspace</p>
+          <h2 className="mt-2 text-2xl font-bold tracking-tight text-[#0F172A] sm:text-3xl">
+            Welcome back, {teacher.full_name.trim().split(" ")[0]}! <span aria-hidden="true">👋</span>
+          </h2>
+          <p className="mt-2 text-sm text-[#475569]">Keep your courses organized and help every class move forward.</p>
+        </section>
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-sm text-[#64748B]">Teaching library</p>
+            <h2 className="mt-1 text-2xl font-bold tracking-tight text-[#0F172A]">My Courses</h2>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setShowCourseModal(true)}
+              className="inline-flex items-center gap-2 rounded-xl bg-[#1769E0] px-4 py-2.5 text-sm font-bold text-white shadow-[0_5px_12px_rgba(23,105,224,.18)] transition hover:bg-[#1257BD]"
+            >
+              <Plus size={16} /> Add Course
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowExerciseModal(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-[#BFDBFE] bg-white px-4 py-2.5 text-sm font-bold text-[#1769E0] transition hover:bg-[#EFF6FF]"
+            >
+              <Plus size={16} /> Add Exercise
+            </button>
+          </div>
+        </div>
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {courses.length ? courses.map((course) => {
             const courseExercises = exercises.filter(
               (exercise) => exercise.course.course_id === course.course_id,
@@ -1150,9 +1179,9 @@ function DynamicTeacherWorkspace({
                 ? "text-emerald-600"
                 : "text-amber-500";
             return (
-              <div key={course.course_id} className="flex flex-col rounded-2xl border border-[#DBEAFE] bg-white p-5 shadow-[0_2px_10px_rgba(15,23,42,.03)]">
+              <div key={course.course_id} className="flex flex-col rounded-2xl border border-[#DBEAFE] bg-white p-5 shadow-[0_4px_14px_rgba(37,99,235,.06)] transition hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(37,99,235,.10)]">
                 <div className="flex items-start justify-between gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-[#1769E0]">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF2FF] text-[#1769E0]">
                     <BookOpen size={20} />
                   </span>
                   {course.material_file_path && (
@@ -1165,13 +1194,19 @@ function DynamicTeacherWorkspace({
                   <h3 className="font-bold text-[#0F172A]">{course.course_name}</h3>
                   <p className="mt-1 text-sm text-[#64748B]">{course.semester} · {course.level}</p>
                 </div>
-                <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-slate-100 pt-3 text-sm text-[#64748B]">
-                  <span className="inline-flex items-center gap-1.5"><FileText size={14} />{courseExercises.length} exercise{courseExercises.length === 1 ? "" : "s"}</span>
-                  <span className="inline-flex items-center gap-1.5 text-amber-600"><Users size={14} />{courseStudents.length} student{courseStudents.length === 1 ? "" : "s"}</span>
+                <div className="mt-5 grid grid-cols-2 gap-2 border-t border-slate-100 pt-4">
+                  <div className="rounded-xl bg-[#F8FAFC] px-3 py-2.5">
+                    <p className="flex items-center gap-1.5 text-xs text-[#64748B]"><FileText size={14} className="text-[#1769E0]" /> Exercises</p>
+                    <p className="mt-1 text-lg font-bold text-[#0F172A]">{courseExercises.length}</p>
+                  </div>
+                  <div className="rounded-xl bg-[#F8FAFC] px-3 py-2.5">
+                    <p className="flex items-center gap-1.5 text-xs text-[#64748B]"><Users size={14} className="text-[#1769E0]" /> Students</p>
+                    <p className="mt-1 text-lg font-bold text-[#0F172A]">{courseStudents.length}</p>
+                  </div>
                 </div>
-                <div className={`mt-3 rounded-lg bg-[#F8FAFC] px-3 py-2 ${averageClass}`}>
+                <div className={`mt-2 rounded-xl bg-[#F8FAFC] px-3 py-2.5 ${averageClass}`}>
                   <p className="text-xs">Class average</p>
-                  <p className="mt-0.5 text-base font-bold">{courseAverage === null ? "No grades yet" : `${courseAverage.toFixed(1)} / 20`}</p>
+                  <p className="mt-1 text-lg font-bold">{courseAverage === null ? "No grades yet" : `${courseAverage.toFixed(1)} / 20`}</p>
                 </div>
                 <div className="mt-4 space-y-2 border-t border-slate-100 pt-3">
                   {courseExercises.length ? courseExercises.map((exercise) => (
@@ -1185,14 +1220,40 @@ function DynamicTeacherWorkspace({
                     </div>
                   )) : <p className="text-xs text-[#64748B]">No exercises yet.</p>}
                 </div>
-                <div className="mt-auto flex items-center gap-1.5 border-t border-slate-100 pt-3 text-xs font-semibold text-[#1769E0]">
-                  <FileText size={14} />
-                  {courseExercises.length} exercise{courseExercises.length === 1 ? "" : "s"}
-                </div>
               </div>
             );
-          }) : <p className="text-sm text-[#64748B]">No courses created yet.</p>}
+          }) : <div className="rounded-2xl border border-dashed border-[#BFDBFE] bg-white p-10 text-center sm:col-span-2 xl:col-span-3"><BookOpen className="mx-auto text-[#93C5FD]" size={30} /><p className="mt-3 text-sm font-semibold text-[#334155]">No courses created yet.</p><p className="mt-1 text-sm text-[#64748B]">Create your first course to start building your teaching library.</p></div>}
         </div>
+        {showCourseModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+              <h3 className="mb-4 text-xl font-bold text-[#0F172A]">Create New Course</h3>
+              <form onSubmit={handleAddCourse} className="space-y-4">
+                <input autoFocus required placeholder="Course title" value={newCourseName} onChange={(event) => setNewCourseName(event.target.value)} className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#1769E0]" />
+                <input required placeholder="Subject or semester" value={newCourseSubject} onChange={(event) => setNewCourseSubject(event.target.value)} className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#1769E0]" />
+                <select required value={newCourseClassId} onChange={(event) => setNewCourseClassId(Number(event.target.value))} className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#1769E0]">
+                  {teacher.classes.map((item) => <option key={item.class_id} value={item.class_id}>{item.name} · {item.academic_year}</option>)}
+                </select>
+                <input type="file" accept="application/pdf,image/jpeg,image/png" onChange={(event) => setNewCourseFile(event.target.files?.[0])} className="w-full text-sm text-slate-600" />
+                <div className="flex justify-end gap-3 pt-2"><button type="button" onClick={() => setShowCourseModal(false)} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-50">Cancel</button><button type="submit" disabled={saving} className="rounded-xl bg-[#1769E0] px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50">{saving ? "Creating..." : "Create Course"}</button></div>
+              </form>
+            </div>
+          </div>
+        )}
+        {showExerciseModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+              <h3 className="mb-4 text-xl font-bold text-[#0F172A]">Create New Exercise</h3>
+              <form onSubmit={handleAddExercise} className="space-y-4">
+                {courses.length ? <select required value={newExerciseCourseId} onChange={(event) => setNewExerciseCourseId(Number(event.target.value))} className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#1769E0]">{courses.map((course) => <option key={course.course_id} value={course.course_id}>{course.course_name}</option>)}</select> : <p className="text-sm text-rose-600">Create a course first.</p>}
+                <input autoFocus required placeholder="Exercise title" value={newExerciseName} onChange={(event) => setNewExerciseName(event.target.value)} className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#1769E0]" />
+                <input required type="number" min="1" value={newExerciseMaxScore} onChange={(event) => setNewExerciseMaxScore(Number(event.target.value))} className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#1769E0]" />
+                <input type="file" accept="application/pdf,image/jpeg,image/png" onChange={(event) => setNewExerciseFile(event.target.files?.[0])} className="w-full text-sm text-slate-600" />
+                <div className="flex justify-end gap-3 pt-2"><button type="button" onClick={() => setShowExerciseModal(false)} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-50">Cancel</button><button type="submit" disabled={saving || !courses.length} className="rounded-xl bg-[#1769E0] px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50">{saving ? "Creating..." : "Create Exercise"}</button></div>
+              </form>
+            </div>
+          </div>
+        )}
       </section>
     );
   }
@@ -1364,6 +1425,13 @@ function DynamicTeacherWorkspace({
 
   return (
     <section id="overview" className="space-y-7 relative">
+      <section className="rounded-2xl border border-[#BFDBFE] bg-[#EFF6FF] p-5 shadow-[0_2px_10px_rgba(37,99,235,.06)] sm:p-6">
+        <p className="text-sm font-semibold text-[#2563EB]">Teacher workspace</p>
+        <h2 className="mt-2 text-2xl font-bold tracking-tight text-[#0F172A] sm:text-3xl">
+          Welcome back, {teacher.full_name.trim().split(" ")[0]}! <span aria-hidden="true">👋</span>
+        </h2>
+        <p className="mt-2 text-sm text-[#475569]">Your classes, courses, and student progress in one place.</p>
+      </section>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="mb-2 text-sm text-[#475569]">Active class</p>
