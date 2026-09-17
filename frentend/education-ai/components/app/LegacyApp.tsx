@@ -1731,8 +1731,33 @@ function DynamicTeacherWorkspace({
         <h2 className="font-bold text-[#0F172A]">Class Performance by Course</h2>
         <p className="mt-1 text-sm text-[#64748B]">Average student score in each of your courses.</p>
         <div className="mt-5 grid gap-4 md:grid-cols-2">
-          {courses.slice(0, 4).map((course, index) => {
-            const progress = 55 + ((index * 13) % 35);
+          {courses.slice(0, 4).map((course) => {
+            const courseExercises = exercises.filter(
+              (exercise) => exercise.course?.course_id === course.course_id,
+            );
+            const courseExerciseIds = new Set(
+              courseExercises.map((exercise) => exercise.exercise_id),
+            );
+            const courseScores = grades.flatMap((grade) => {
+              if (!courseExerciseIds.has(grade.exercise_id)) return [];
+              const exercise = courseExercises.find(
+                (item) => item.exercise_id === grade.exercise_id,
+              );
+              const score = Number(grade.score);
+              const maxScore = Number(exercise?.max_score);
+              if (!Number.isFinite(score)) return [];
+              return [
+                Number.isFinite(maxScore) && maxScore > 0
+                  ? (score / maxScore) * 20
+                  : score,
+              ];
+            });
+            const courseAverage = courseScores.length
+              ? courseScores.reduce((total, score) => total + score, 0) / courseScores.length
+              : null;
+            const progress = courseAverage === null
+              ? 0
+              : Math.min(100, Math.max(0, (courseAverage / 20) * 100));
             return (
               <div key={course.course_id} className="rounded-lg border border-[#DBEAFE] p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -1740,9 +1765,17 @@ function DynamicTeacherWorkspace({
                     <p className="text-sm font-semibold text-[#0F172A]">{course.course_name}</p>
                     <p className="mt-1 text-xs text-[#64748B]">{course.semester} · {students.length} students</p>
                   </div>
-                  <span className="text-sm font-bold text-emerald-600">{(progress / 5).toFixed(1)} / 20</span>
+                  <span className={`text-sm font-bold ${courseAverage === null ? "text-[#64748B]" : "text-emerald-600"}`}>
+                    {courseAverage === null ? "No grades yet" : `${courseAverage.toFixed(1)} / 20`}
+                  </span>
                 </div>
-                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#E2E8F0]"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${progress}%` }} /></div>
+                {courseAverage === null ? (
+                  <p className="mt-3 text-xs text-[#64748B]">0 submissions graded</p>
+                ) : (
+                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#E2E8F0]">
+                    <div className="h-full rounded-full bg-emerald-500" style={{ width: `${progress}%` }} />
+                  </div>
+                )}
               </div>
             );
           })}
