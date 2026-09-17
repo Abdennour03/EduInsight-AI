@@ -99,7 +99,7 @@ def setup_admin(data: AdminSetupRequest):
             "phone_number": admin.phone_number,
         }
     except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error))
+        raise HTTPException(status_code=409, detail=str(error))
 
 
 @router.get("/me", response_model=AdminProfileResponse)

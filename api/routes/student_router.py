@@ -325,15 +325,17 @@ from api.dependencies import student_controller
 
 @router.post("/", response_model=StudentResponse)
 def create_student(data: StudentCreate):
-
-    result = student_controller.create_student(
-        data.full_name,
-        data.email,
-        data.password,
-        data.phone_number,
-        data.level,
-        data.class_id
-    )
+    try:
+        result = student_controller.create_student(
+            data.full_name,
+            data.email,
+            data.password,
+            data.phone_number,
+            data.level,
+            data.class_id
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error))
 
     if result is False:
         raise HTTPException(

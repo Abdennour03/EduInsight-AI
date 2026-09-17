@@ -1,3 +1,5 @@
+import sqlite3
+
 from models.teacher import Teacher
 from models.class_group import ClassGroup
 
@@ -31,11 +33,23 @@ class TeacherRepo:
 
     def add_teacher(self, teacher, admin_id=None, organization_id=None):
         organization_id = organization_id if organization_id is not None else self._organization_for_admin(admin_id)
-        self.db.cursor.execute(
+        if self.db.cursor.execute(
+            """SELECT 1 FROM teachers
+               WHERE organization_id IS ? AND (
+                   email = ? OR (length(phone_number) = 10 AND phone_number = ?)
+               )
+               LIMIT 1""",
+            (organization_id, teacher.email, teacher.phone_number),
+        ).fetchone():
+            raise ValueError("A teacher with this email or phone number already exists.")
+        try:
+            self.db.cursor.execute(
                 """INSERT INTO teachers (full_name, email, password, phone_number, admin_id, organization_id)
                     VALUES (?, ?, ?, ?, ?, ?)""",
                 (teacher.full_name, teacher.email, teacher.password, teacher.phone_number, admin_id, organization_id),
-        )
+            )
+        except sqlite3.IntegrityError as error:
+            raise ValueError("A teacher with this email or phone number already exists.") from error
         self.db.connection.commit()
         teacher.teacher_id = self.db.cursor.lastrowid
         teacher.organization_id = organization_id

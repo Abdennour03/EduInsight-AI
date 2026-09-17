@@ -1,3 +1,5 @@
+import sqlite3
+
 from models.student import Student
 
 class StudentRepo:
@@ -15,20 +17,25 @@ class StudentRepo:
 
     def add_student(self, student, admin_id=None, organization_id=None):
         organization_id = organization_id if organization_id is not None else self._organization_for_admin(admin_id)
-        self.db.cursor.execute("""
-    INSERT INTO students
-    (full_name, email, password, phone_number, level, class_id, admin_id, organization_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (student.full_name,
-         student.email,
-         student.password,
-         student.phone_number,
-         student.level,
-         student.class_id,
-         admin_id,
-         organization_id,
-         ))
+        if self.db.cursor.execute(
+            """SELECT 1 FROM students
+               WHERE organization_id IS ? AND (
+                   email = ? OR (length(phone_number) = 10 AND phone_number = ?)
+               )
+               LIMIT 1""",
+            (organization_id, student.email, student.phone_number),
+        ).fetchone():
+            raise ValueError("A student with this email or phone number already exists.")
+        try:
+            self.db.cursor.execute("""
+        INSERT INTO students
+        (full_name, email, password, phone_number, level, class_id, admin_id, organization_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (student.full_name, student.email, student.password, student.phone_number,
+             student.level, student.class_id, admin_id, organization_id))
+        except sqlite3.IntegrityError as error:
+            raise ValueError("A student with this email or phone number already exists.") from error
         self.db.connection.commit()
         student.student_id = self.db.cursor.lastrowid
         student.organization_id = organization_id

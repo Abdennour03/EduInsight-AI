@@ -68,3 +68,57 @@ def test_admin_can_login_with_unique_phone_number(tmp_path):
 
     assert result["role"] == "admin"
     db.close()
+
+
+def test_duplicate_student_email_or_phone_is_rejected(tmp_path):
+    db = Database(str(tmp_path / "duplicate-student.db"))
+    repository = StudentRepo(db)
+    first = Student(None, "First Student", "same@example.com", "hash", "0612345681", "3AC")
+    repository.add_student(first)
+
+    duplicate_email = Student(None, "Second Student", "same@example.com", "hash", "0612345682", "3AC")
+    duplicate_phone = Student(None, "Third Student", "other@example.com", "hash", "0612345681", "3AC")
+
+    import pytest
+    with pytest.raises(ValueError, match="already exists"):
+        repository.add_student(duplicate_email)
+    with pytest.raises(ValueError, match="already exists"):
+        repository.add_student(duplicate_phone)
+    db.close()
+
+
+def test_malformed_password_hash_is_rejected_without_crashing(tmp_path):
+    db = Database(str(tmp_path / "malformed-password.db"))
+    student = Student(None, "Bad Hash Student", "bad-hash@example.com", "not-a-password-hash", "0612345683", "3AC")
+    StudentRepo(db).add_student(student)
+
+    result = AuthService(StudentRepo(db), TeacherRepo(db), AdminRepo(db)).login(
+        student.email, "any-password"
+    )
+
+    assert result is None
+    db.close()
+
+
+def test_account_persists_when_database_is_reopened(tmp_path):
+    db_path = tmp_path / "persistent-auth.db"
+    db = Database(str(db_path))
+    password = "SecurePass123!"
+    student = Student(
+        None,
+        "Persistent Student",
+        "persistent@example.com",
+        hash_password(password),
+        "0612345684",
+        "3AC",
+    )
+    StudentRepo(db).add_student(student)
+    db.close()
+
+    reopened_db = Database(str(db_path))
+    result = AuthService(
+        StudentRepo(reopened_db), TeacherRepo(reopened_db), AdminRepo(reopened_db)
+    ).login(student.email, password)
+
+    assert result["role"] == "student"
+    reopened_db.close()

@@ -2023,6 +2023,7 @@ function AdminWorkspace({
   );
   const [query, setQuery] = useState("");
   const [formOpen, setFormOpen] = useState(false);
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [selectedNewStudentClassIds, setSelectedNewStudentClassIds] = useState<number[]>([]);
@@ -2479,13 +2480,23 @@ function AdminWorkspace({
                   className="rounded-lg border border-[#DBEAFE] px-3 py-2 text-sm"
                 />
                 {fieldErrors.email && <p className="text-xs font-semibold text-rose-600">{fieldErrors.email}</p>}
-                <input
-                  name="password"
-                  required
-                  type="password"
-                  placeholder="Password"
-                  className="rounded-lg border border-[#DBEAFE] px-3 py-2 text-sm"
-                />
+                <div className="relative">
+                  <input
+                    name="password"
+                    required
+                    type={showCreatePassword ? "text" : "password"}
+                    placeholder="Password"
+                    className="w-full rounded-lg border border-[#DBEAFE] px-3 py-2 pr-10 text-sm"
+                  />
+                  <button
+                    type="button"
+                    aria-label={showCreatePassword ? "Hide password" : "Show password"}
+                    onClick={() => setShowCreatePassword((value) => !value)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[#64748B]"
+                  >
+                    {showCreatePassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                  </button>
+                </div>
                 {fieldErrors.password && <p className="text-xs font-semibold text-rose-600">{fieldErrors.password}</p>}
                 <input
                   name="phone_number"

@@ -1,3 +1,5 @@
+import sqlite3
+
 from models.admin import Admin
 
 
@@ -15,6 +17,11 @@ class AdminRepo:
         return self.db.cursor.lastrowid
 
     def add_admin(self, admin):
+        if self.db.cursor.execute(
+            "SELECT 1 FROM admins WHERE email = ? OR phone_number = ? LIMIT 1",
+            (admin.email, admin.phone_number),
+        ).fetchone():
+            raise ValueError("An admin with this email or phone number already exists.")
         columns = {row[1] for row in self.db.cursor.execute("PRAGMA table_info(admins)")}
         next_id = self.db.cursor.execute(
             "SELECT COALESCE(MAX(id), 0) + 1 FROM admins"
@@ -22,18 +29,21 @@ class AdminRepo:
         organization_id = getattr(admin, "organization_id", None)
         if organization_id is None:
             organization_id = self.create_organization(f"{admin.full_name.strip()} Organization")
-        if "password" in columns:
-            self.db.cursor.execute(
-                """INSERT INTO admins
+        try:
+            if "password" in columns:
+                self.db.cursor.execute(
+                    """INSERT INTO admins
                    (id, full_name, email, phone_number, password, password_hash, created_at, organization_id)
                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)""",
-                (next_id, admin.full_name, admin.email, admin.phone_number, admin.password, admin.password, organization_id),
-            )
-        else:
-            self.db.cursor.execute(
-                "INSERT INTO admins (id, full_name, email, phone_number, password_hash, organization_id) VALUES (?, ?, ?, ?, ?, ?)",
-                (next_id, admin.full_name, admin.email, admin.phone_number, admin.password, organization_id),
-            )
+                    (next_id, admin.full_name, admin.email, admin.phone_number, admin.password, admin.password, organization_id),
+                )
+            else:
+                self.db.cursor.execute(
+                    "INSERT INTO admins (id, full_name, email, phone_number, password_hash, organization_id) VALUES (?, ?, ?, ?, ?, ?)",
+                    (next_id, admin.full_name, admin.email, admin.phone_number, admin.password, organization_id),
+                )
+        except sqlite3.IntegrityError as error:
+            raise ValueError("An admin with this email or phone number already exists.") from error
         self.db.connection.commit()
         admin.admin_id = next_id
         admin.id = admin.admin_id

@@ -1,10 +1,11 @@
 from datetime import datetime, timedelta, timezone
+import os
 
 from jose import jwt
 from pwdlib import PasswordHash
 
 
-SECRET_KEY = "change-this-secret-key"
+SECRET_KEY = os.getenv("SECRET_KEY", "change-this-secret-key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
@@ -17,7 +18,10 @@ def hash_password(password: str):
 
 
 def verify_password(password: str, hashed_password: str):
-    return password_hash.verify(password, hashed_password)
+    try:
+        return password_hash.verify(password, hashed_password)
+    except Exception:
+        return False
 
 
 def create_access_token(data: dict):

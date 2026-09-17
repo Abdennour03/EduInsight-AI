@@ -476,13 +476,15 @@ def get_all_teachers(_admin=Depends(get_current_admin)):
 
 @router.post("/")
 def create_teacher(data: TeacherCreate):
-
-    result = teacher_controller.create_teacher(
-        data.full_name,
-        data.email,
-        data.password,
-        data.phone_number
-    )
+    try:
+        result = teacher_controller.create_teacher(
+            data.full_name,
+            data.email,
+            data.password,
+            data.phone_number
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error))
 
     if result is False:
         raise HTTPException(

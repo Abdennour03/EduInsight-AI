@@ -167,6 +167,20 @@ Set the backend environment variable:
 CORS_ORIGINS=https://your-app.vercel.app
 ```
 
+### Railway persistence
+
+The backend uses SQLite. SQLite data must be stored on a persistent Railway
+Volume, not the container filesystem. Mount a Volume at `/data` and set:
+
+```text
+EDUINSIGHT_DB_PATH=/data/eduinsight.db
+SECRET_KEY=<long-random-secret>
+```
+
+Without this Volume, accounts and passwords can disappear when Railway
+replaces or restarts the container. `SECRET_KEY` must remain unchanged or
+existing login sessions will become invalid.
+
 Multiple frontend origins can be comma-separated. For temporary testing,
 `CORS_ORIGINS=*` is supported; wildcard mode disables credentialed CORS as
 required by browsers. Render provides the `PORT` variable automatically.

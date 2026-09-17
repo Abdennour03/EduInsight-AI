@@ -1,6 +1,7 @@
 import sqlite3
 import threading
 import os
+from pathlib import Path
 
 
 class _LockedCursor:
@@ -74,6 +75,8 @@ class _LockedConnection:
 class Database:
     def __init__(self, db_name=None):
         db_name = db_name or os.getenv("EDUINSIGHT_DB_PATH", "eduinsight.db")
+        if db_name != ":memory:":
+            Path(db_name).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         self.connection = _LockedConnection(
             sqlite3.connect(db_name, check_same_thread=False),
@@ -247,27 +250,43 @@ class Database:
         self.cursor.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_admins_phone_unique ON admins(phone_number) WHERE phone_number IS NOT NULL"
         )
+        self.cursor.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_students_org_email_unique ON students(organization_id, email)"
+        )
+        self.cursor.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_teachers_org_email_unique ON teachers(organization_id, email)"
+        )
+        self.cursor.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_students_unscoped_email_unique ON students(email) WHERE organization_id IS NULL"
+        )
+        self.cursor.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_teachers_unscoped_email_unique ON teachers(email) WHERE organization_id IS NULL"
+        )
         self.cursor.execute("DROP INDEX IF EXISTS idx_students_phone_unique")
         self.cursor.execute("DROP INDEX IF EXISTS idx_teachers_phone_unique")
+        self.cursor.execute("DROP INDEX IF EXISTS idx_students_org_phone_unique")
+        self.cursor.execute("DROP INDEX IF EXISTS idx_teachers_org_phone_unique")
+        self.cursor.execute("DROP INDEX IF EXISTS idx_students_unscoped_phone_unique")
+        self.cursor.execute("DROP INDEX IF EXISTS idx_teachers_unscoped_phone_unique")
         self.cursor.execute(
                 """CREATE UNIQUE INDEX IF NOT EXISTS idx_students_org_phone_unique
                     ON students(organization_id, phone_number)
-                    WHERE phone_number IS NOT NULL"""
+                       WHERE length(phone_number) = 10"""
         )
         self.cursor.execute(
                 """CREATE UNIQUE INDEX IF NOT EXISTS idx_teachers_org_phone_unique
                     ON teachers(organization_id, phone_number)
-                    WHERE phone_number IS NOT NULL"""
+                       WHERE length(phone_number) = 10"""
         )
         self.cursor.execute(
             """CREATE UNIQUE INDEX IF NOT EXISTS idx_students_unscoped_phone_unique
                ON students(phone_number)
-               WHERE organization_id IS NULL AND phone_number IS NOT NULL"""
+               WHERE organization_id IS NULL AND length(phone_number) = 10"""
         )
         self.cursor.execute(
             """CREATE UNIQUE INDEX IF NOT EXISTS idx_teachers_unscoped_phone_unique
                ON teachers(phone_number)
-               WHERE organization_id IS NULL AND phone_number IS NOT NULL"""
+               WHERE organization_id IS NULL AND length(phone_number) = 10"""
         )
         self.connection.commit()
         notification_schema = self.cursor.execute(
