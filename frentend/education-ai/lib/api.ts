@@ -236,13 +236,13 @@ export const api = {
     exercise_name: string;
     course_id: number;
     max_score: number;
-    file?: File;
+    file: File;
   }) => {
     const formData = new FormData();
     formData.append("exercise_name", data.exercise_name);
     formData.append("course_id", String(data.course_id));
     formData.append("max_score", String(data.max_score));
-    if (data.file) formData.append("file", data.file);
+    formData.append("file", data.file, data.file.name);
     return request<{ message: string }>("/teachers/me/exercises", {
       method: "POST",
       body: formData,

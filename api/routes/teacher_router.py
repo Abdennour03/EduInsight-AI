@@ -197,11 +197,16 @@ def create_my_exercise(
     exercise_name: str = Form(...),
     course_id: int = Form(...),
     max_score: float = Form(20),
-    file: UploadFile | None = File(None),
+    file: UploadFile = File(...),
     current_user=Depends(require_teacher)
 ):
 
     try:
+        if not file.filename:
+            raise ValueError("Please attach a file or image for the exercise.")
+        allowed_types = {"application/pdf", "image/jpeg", "image/png"}
+        if file.content_type not in allowed_types:
+            raise ValueError("Exercise material must be a PDF, JPEG, or PNG file.")
 
         result = exercise_controller.create_exercise(
             exercise_name,
@@ -210,18 +215,18 @@ def create_my_exercise(
             max_score,
         )
 
-        if file:
-            exercise = db.cursor.execute(
-                "SELECT exercise_id FROM exercises WHERE course_id = ? AND exercise_name = ? ORDER BY exercise_id DESC LIMIT 1",
-                (course_id, exercise_name),
-            ).fetchone()
-            if exercise:
-                file_path = save_material_file(file, "exercise", exercise[0])
-                db.cursor.execute(
-                    "INSERT INTO learning_materials (owner_type, owner_id, file_path) VALUES (?, ?, ?)",
-                    ("exercise", exercise[0], file_path),
-                )
-                db.connection.commit()
+        exercise = db.cursor.execute(
+            "SELECT exercise_id FROM exercises WHERE course_id = ? AND exercise_name = ? ORDER BY exercise_id DESC LIMIT 1",
+            (course_id, exercise_name),
+        ).fetchone()
+        if exercise is None:
+            raise ValueError("Exercise was created but could not be linked to its material.")
+        file_path = save_material_file(file, "exercise", exercise[0])
+        db.cursor.execute(
+            "INSERT INTO learning_materials (owner_type, owner_id, file_path) VALUES (?, ?, ?)",
+            ("exercise", exercise[0], file_path),
+        )
+        db.connection.commit()
 
         return {
             "message": result
