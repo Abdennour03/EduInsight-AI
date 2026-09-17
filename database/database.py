@@ -1,27 +1,41 @@
 import sqlite3
 import threading
 import os
+from contextlib import contextmanager
 from pathlib import Path
 
 
 class _LockedCursor:
-    def __init__(self, cursor, lock):
+    def __init__(self, cursor, lock, rollback):
         self._cursor = cursor
         self._lock = lock
+        self._rollback = rollback
 
     def execute(self, *args, **kwargs):
-        with self._lock:
-            self._cursor.execute(*args, **kwargs)
+        try:
+            with self._lock:
+                self._cursor.execute(*args, **kwargs)
+        except sqlite3.Error:
+            self._rollback()
+            raise
         return self
 
     def executemany(self, *args, **kwargs):
-        with self._lock:
-            self._cursor.executemany(*args, **kwargs)
+        try:
+            with self._lock:
+                self._cursor.executemany(*args, **kwargs)
+        except sqlite3.Error:
+            self._rollback()
+            raise
         return self
 
     def executescript(self, *args, **kwargs):
-        with self._lock:
-            self._cursor.executescript(*args, **kwargs)
+        try:
+            with self._lock:
+                self._cursor.executescript(*args, **kwargs)
+        except sqlite3.Error:
+            self._rollback()
+            raise
         return self
 
     def fetchone(self):
@@ -49,16 +63,20 @@ class _LockedConnection:
         self._lock = lock
 
     def cursor(self):
-        return _LockedCursor(self._connection.cursor(), self._lock)
+        return _LockedCursor(self._connection.cursor(), self._lock, self.rollback)
 
     def execute(self, *args, **kwargs):
         with self._lock:
             cursor = self._connection.execute(*args, **kwargs)
-        return _LockedCursor(cursor, self._lock)
+        return _LockedCursor(cursor, self._lock, self.rollback)
 
     def commit(self):
-        with self._lock:
-            self._connection.commit()
+        try:
+            with self._lock:
+                self._connection.commit()
+        except sqlite3.Error:
+            self.rollback()
+            raise
 
     def rollback(self):
         with self._lock:
@@ -74,17 +92,56 @@ class _LockedConnection:
 
 class Database:
     def __init__(self, db_name=None):
-        db_name = db_name or os.getenv("EDUINSIGHT_DB_PATH", "eduinsight.db")
+        database_url = os.getenv("DATABASE_URL")
+        if database_url and not database_url.startswith(("sqlite:", "sqlite3:")):
+            raise RuntimeError(
+                "DATABASE_URL points to a non-SQLite database, but this backend uses "
+                "raw SQLite. Configure EDUINSIGHT_DB_PATH or migrate the repositories "
+                "to PostgreSQL before setting a PostgreSQL DATABASE_URL."
+            )
+
+        configured_path = db_name or os.getenv("EDUINSIGHT_DB_PATH") or database_url
+        if configured_path is None:
+            if os.getenv("RAILWAY_ENVIRONMENT_NAME") or os.getenv("RAILWAY_PROJECT_ID"):
+                raise RuntimeError(
+                    "EDUINSIGHT_DB_PATH must point to a Railway persistent Volume, "
+                    "for example /data/eduinsight.db."
+                )
+            configured_path = "eduinsight.db"
+        if isinstance(configured_path, str) and configured_path.startswith(("sqlite:///", "sqlite3:///")):
+            configured_path = configured_path.split("///", 1)[1]
+        if os.getenv("RAILWAY_ENVIRONMENT_NAME") or os.getenv("RAILWAY_PROJECT_ID"):
+            if configured_path == ":memory:" or not Path(configured_path).is_absolute():
+                raise RuntimeError(
+                    "EDUINSIGHT_DB_PATH must be an absolute path on a Railway Volume, "
+                    "for example /data/eduinsight.db."
+                )
+        db_name = configured_path
         if db_name != ":memory:":
-            Path(db_name).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
+            db_name = str(Path(db_name).expanduser().resolve())
+            Path(db_name).parent.mkdir(parents=True, exist_ok=True)
+        self.path = db_name
         self._lock = threading.RLock()
         self.connection = _LockedConnection(
             sqlite3.connect(db_name, check_same_thread=False),
             self._lock,
         )
         self.connection.execute("PRAGMA foreign_keys = ON")
+        self.connection.execute("PRAGMA journal_mode = WAL")
+        self.connection.execute("PRAGMA synchronous = FULL")
+        self.connection.execute("PRAGMA busy_timeout = 5000")
         self._cursor_storage = threading.local()
         self.create_tables()
+
+    @contextmanager
+    def transaction(self):
+        """Commit a group of writes together and roll it back on any failure."""
+        try:
+            yield self
+            self.connection.commit()
+        except Exception:
+            self.connection.rollback()
+            raise
 
     @property
     def cursor(self):

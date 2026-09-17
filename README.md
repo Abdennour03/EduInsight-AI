@@ -177,9 +177,25 @@ EDUINSIGHT_DB_PATH=/data/eduinsight.db
 SECRET_KEY=<long-random-secret>
 ```
 
+In Railway, open the service's **Volumes** settings, create a volume, and set
+its mount path to exactly `/data`. Then add `EDUINSIGHT_DB_PATH=/data/eduinsight.db`
+to the service variables and redeploy. The application now fails at startup if
+Railway is detected without this absolute path, which prevents silently creating
+an ephemeral database in the container filesystem.
+
 Without this Volume, accounts and passwords can disappear when Railway
 replaces or restarts the container. `SECRET_KEY` must remain unchanged or
 existing login sessions will become invalid.
+
+`DATABASE_URL` is not used by this backend. It uses the raw SQLite gateway in
+`database/database.py`; adding a PostgreSQL variable alone does not migrate or
+persist the application data.
+
+Do not set `DATABASE_URL` to PostgreSQL for this version. The backend does not
+contain SQLAlchemy models, a PostgreSQL driver, or PostgreSQL migrations; it
+will reject a non-SQLite `DATABASE_URL` during startup instead of appearing to
+connect while continuing to write somewhere else. A PostgreSQL migration must
+replace the raw repositories and schema layer as one deliberate migration.
 
 Multiple frontend origins can be comma-separated. For temporary testing,
 `CORS_ORIGINS=*` is supported; wildcard mode disables credentialed CORS as
