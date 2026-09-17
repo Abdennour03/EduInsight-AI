@@ -807,6 +807,7 @@ function DynamicTeacherWorkspace({
 
   const handleAddExercise = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("Submitting form...");
     setExerciseFileError("");
     setExerciseSuccess("");
     setWorkspaceError("");
@@ -1206,6 +1207,11 @@ function DynamicTeacherWorkspace({
             {exerciseSuccess}
           </p>
         )}
+        {workspaceError && (
+          <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">
+            {workspaceError}
+          </p>
+        )}
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {courses.length ? courses.map((course) => {
             const courseExercises = exercises.filter(
@@ -1300,7 +1306,7 @@ function DynamicTeacherWorkspace({
                 {courses.length ? <select required value={newExerciseCourseId} onChange={(event) => setNewExerciseCourseId(Number(event.target.value))} className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#1769E0]">{courses.map((course) => <option key={course.course_id} value={course.course_id}>{course.course_name}</option>)}</select> : <p className="text-sm text-rose-600">Create a course first.</p>}
                 <input autoFocus required placeholder="Exercise title" value={newExerciseName} onChange={(event) => setNewExerciseName(event.target.value)} className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#1769E0]" />
                 <input required type="number" min="1" value={newExerciseMaxScore} onChange={(event) => setNewExerciseMaxScore(Number(event.target.value))} className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#1769E0]" />
-                <input required type="file" accept="application/pdf,image/jpeg,image/png" onChange={(event) => { setNewExerciseFile(event.target.files?.[0]); setExerciseFileError(""); }} className="w-full text-sm text-slate-600" />
+                <input type="file" accept="application/pdf,image/jpeg,image/png" onChange={(event) => { setNewExerciseFile(event.target.files?.[0]); setExerciseFileError(""); }} className="w-full text-sm text-slate-600" />
                 {exerciseFileError && <p className="text-sm text-rose-600">{exerciseFileError}</p>}
                 <div className="flex justify-end gap-3 pt-2"><button type="button" onClick={() => setShowExerciseModal(false)} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-50">Cancel</button><button type="submit" disabled={saving || !courses.length} className="rounded-xl bg-[#1769E0] px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50">{saving ? "Creating..." : "Create Exercise"}</button></div>
               </form>
