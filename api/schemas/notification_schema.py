@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
 
 class NotificationResponse(BaseModel):
@@ -12,10 +12,16 @@ class NotificationResponse(BaseModel):
 
 
 class AdminNotificationCreate(BaseModel):
-    title: str
-    message: str
-    class_id: int | None = None
-    student_id: int | None = None
+    title: str = Field(min_length=1, max_length=200)
+    message: str = Field(min_length=1, max_length=5000)
+    class_id: int | None = Field(default=None, gt=0)
+    student_id: int | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def validate_recipient(self):
+        if (self.student_id is None) == (self.class_id is None):
+            raise ValueError("Provide exactly one of student_id or class_id.")
+        return self
 
 
 class NotificationCreate(BaseModel):

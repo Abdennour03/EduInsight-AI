@@ -71,24 +71,51 @@ class NotificationService:
         admin = self.admin_repo.get_admin(admin_id) if self.admin_repo else None
         if admin is None:
             raise ValueError("Admin not found.")
+        if admin.organization_id is None:
+            raise ValueError("Admin organization is not configured.")
         # sender_id remains populated for compatibility with existing SQLite databases;
         # admin_id and sender_type identify the real sender in the notification feed.
-        teachers = self.teacher_repo.get_all_teacher()
+        teachers = self.teacher_repo.get_all_teachers(admin_id=admin_id)
         if not teachers:
             raise ValueError("Create a teacher account before sending notifications.")
         NotificationValidator.validation_title(title)
         NotificationValidator.validation_message(message)
-        notification = Notification(None, title, message, teachers[0], None, datetime.now(), admin_sender=admin)
+        if student_id is not None:
+            recipients = [
+                self.student_repo.get_student(
+                    student_id,
+                    organization_id=admin.organization_id,
+                )
+            ]
+            if recipients[0] is None:
+                raise ValueError("Student not found in your workspace.")
+        else:
+            recipients = [
+                student
+                for student in self.student_repo.get_students_by_class_id(class_id)
+                if getattr(student, "organization_id", None) == admin.organization_id
+            ]
+            if not recipients:
+                raise ValueError("No students found in this class or the class is not in your workspace.")
+        notification = Notification(
+            None,
+            title,
+            message,
+            teachers[0],
+            None,
+            datetime.now(),
+            admin_sender=admin,
+            organization_id=admin.organization_id,
+        )
         self.notification_repo.add_notification(notification)
         if student_id is not None:
-            self.send_to_student(notification, student_id)
+            self.student_notification_repo.add_student_notification(
+                StudentNotification(None, recipients[0], notification)
+            )
             return "Notification sent to student."
-        students = self.student_repo.get_students_by_class_id(class_id)
-        if not students:
-            raise ValueError("No students found in this class.")
-        for student in students:
+        for student in recipients:
             self.student_notification_repo.add_student_notification(StudentNotification(None, student, notification))
-        return f"Notification sent to {len(students)} student(s) in this class."
+        return f"Notification sent to {len(recipients)} student(s) in this class."
 
     def get_notification(self, notification_id):
         notification = self.notification_repo.get_notification(notification_id)

@@ -3201,6 +3201,7 @@ function AdminNotifications({
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const form = event.currentTarget;
     const data = new FormData(event.currentTarget);
     if (recipientMode === "student" && selectedStudentId === null) {
       setFeedback(translate(language, "selectStudentFirst"));
@@ -3210,11 +3211,11 @@ function AdminNotifications({
     setFeedback("");
     try {
       await api.sendAdminNotification({
-        title: String(data.get("title") ?? ""),
-        message: String(data.get("message") ?? ""),
+        title: String(data.get("title") ?? "").trim(),
+        message: String(data.get("message") ?? "").trim(),
         ...(recipientMode === "class" ? { class_id: selectedClassId } : { student_id: selectedStudentId ?? undefined }),
       });
-      event.currentTarget.reset();
+      form.reset();
       setFeedback(translate(language, "notificationSent"));
       await reload();
     } catch (error) {

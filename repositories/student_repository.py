@@ -178,7 +178,7 @@ class StudentRepo:
         """Fetch all students enrolled in a single class."""
         self.db.cursor.execute(
             """SELECT student_id, full_name, email,
-                      password, phone_number, level, class_id
+                      password, phone_number, level, class_id, organization_id
                FROM students
                     WHERE class_id = ? OR student_id IN (
                          SELECT student_id FROM student_classes WHERE class_id = ?
@@ -186,7 +186,7 @@ class StudentRepo:
                 (class_id, class_id),
         )
         return [
-            Student(row[0], row[1], row[2], row[3], row[4], row[5], row[6])
+            Student(row[0], row[1], row[2], row[3], row[4], row[5], row[6], organization_id=row[7])
             for row in self.db.cursor.fetchall()
         ]
 
