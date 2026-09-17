@@ -4652,16 +4652,18 @@ export function ConnectedApp({
       }
 
       const loadTeacherData = async (teacherObj: Teacher) => {
-        const [
-          classStudentGroups,
-          apiCourses,
-          apiExercises,
-          apiGrades,
-          apiAttendance,
-          apiNotifications,
-        ] = await Promise.all([
+        const normalizedTeacher: Teacher = {
+          ...teacherObj,
+          classes: Array.isArray(teacherObj.classes) ? teacherObj.classes : [],
+        };
+        if (!cancelled) {
+          setUserName(normalizedTeacher.full_name);
+          setTeacherData(normalizedTeacher);
+        }
+
+        const results = await Promise.allSettled([
           Promise.all(
-            teacherObj.classes.map((item) =>
+            normalizedTeacher.classes.map((item) =>
               api.getAttendanceStudents(item.class_id),
             ),
           ),
@@ -4671,9 +4673,15 @@ export function ConnectedApp({
           api.getTeacherAttendance(),
           api.getNotifications(),
         ]);
+        const valueOr = <T,>(index: number, fallback: T): T =>
+          results[index].status === "fulfilled" ? results[index].value as T : fallback;
+        const classStudentGroups = valueOr<AttendanceStudent[][]>(0, []);
+        const apiCourses = valueOr<TeacherCourse[]>(1, []);
+        const apiExercises = valueOr<TeacherExercise[]>(2, []);
+        const apiGrades = valueOr<Grade[]>(3, []);
+        const apiAttendance = valueOr<AttendanceRecord[]>(4, []);
+        const apiNotifications = valueOr<TeacherNotification[]>(5, []);
         if (!cancelled) {
-          setUserName(teacherObj.full_name);
-          setTeacherData(teacherObj);
           setTeacherStudents(classStudentGroups.flat());
           setTeacherCourses(apiCourses);
           setTeacherExercises(apiExercises);
