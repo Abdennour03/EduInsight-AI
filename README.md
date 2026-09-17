@@ -191,6 +191,12 @@ Vercel project settings:
 NEXT_PUBLIC_API_URL=https://your-render-service.onrender.com
 ```
 
+In Vercel, set the project **Root Directory** to `frentend/education-ai` and
+add `NEXT_PUBLIC_API_URL` for the **Production** environment. Redeploy after
+saving the variable. Do not use `127.0.0.1` or `localhost` there: those URLs
+refer to the Vercel build/runtime, not the local computer. The Render backend
+must also allow the deployed Vercel origin in `CORS_ORIGINS`.
+
 The production build command is `npm run build`. After deployment, update the
 Render `CORS_ORIGINS` value with the real Vercel URL and redeploy or restart
 the backend.
